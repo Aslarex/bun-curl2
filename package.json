@@ -1,13 +1,6 @@
 {
   "name": "bun-curl2",
-  "version": "0.0.5",
-  "type": "module",
-  "module": "./dist/index.js",
-  "devDependencies": {
-    "@types/bun": "latest",
-    "bun-types": "^1.2.3",
-    "typescript": "^5.7.3"
-  },
+  "version": "0.0.6",
   "author": {
     "name": "Nicholas",
     "url": "https://github.com/Aslarex",
@@ -17,24 +10,40 @@
     "type": "git",
     "url": "git+https://github.com/Aslarex/bun-curl2.git"
   },
-  "types": "./dist/index.d.ts",
+  "keywords": [
+    "bun",
+    "buncurl",
+    "curl",
+    "fetchalternative",
+    "fastfetch",
+    "bunsh"
+  ],
+  "description": "blazing fast, fetch-like HTTP client built with Bun and curl in TypeScript.",
   "scripts": {
     "dev": "DEBUG=* bun run --hot examples/basic.ts",
     "dev:cache": "DEBUG=* bun run --hot examples/with_cache.ts",
     "build": "rm -rf dist && tsc --project tsconfig.json",
     "prettier": "prettier src/ --write"
   },
-  "main": "./dist/index.js",
   "exports": {
-    "require": "./dist/index.js",
-    "import": "./dist/index.js",
-    "node": "./dist/index.js",
-    "default": "./dist/index.js"
+    ".": {
+      "types": "./dist/index.d.ts",
+      "import": "./dist/index.js"
+    }
   },
+  "type": "module",
+  "module": "./dist/index.js",
+  "files": ["dist"],
   "dependencies": {
     "prettier": "^3.5.2"
   },
+  "types": "./dist/index.d.ts",
   "optionalDependencies": {
     "redis": "^4.7.0"
+  },
+  "devDependencies": {
+    "@types/bun": "latest",
+    "bun-types": "^1.2.3",
+    "typescript": "^5.7.3"
   }
 }
