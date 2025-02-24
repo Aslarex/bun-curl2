@@ -100,9 +100,6 @@ console.log('Response:', response.text());
 - **Bun Child Processes & curl:**  
   BunCurl2 uses Bun's child process capabilities to execute curl commands, delivering impressive speed improvements.
 
-- **Optimized for High Traffic:**  
-  I am using this library
-
 ## Contributing
 
 Contributions are welcome! If you encounter issues or have suggestions, please open an issue or submit a pull request on GitHub.
