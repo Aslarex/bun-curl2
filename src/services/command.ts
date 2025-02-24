@@ -1,4 +1,4 @@
-import type { Initialize, RequestInit } from '../types/Options';
+import type { Initialize, RequestInit } from '../@types/Options';
 import Ciphers from '../models/ciphers';
 import formatProxyString from '../models/proxy';
 import { hasJsonStructure } from '../models/utils';

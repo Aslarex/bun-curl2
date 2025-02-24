@@ -1,5 +1,5 @@
 import Http from './services/http';
-import type { CacheType, Initialize, RequestInit } from './types/Options';
+import type { CacheType, Initialize, RequestInit } from './@types/Options';
 import { type RedisClientType } from 'redis';
 
 class BunCurl {

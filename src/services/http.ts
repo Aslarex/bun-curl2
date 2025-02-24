@@ -1,7 +1,7 @@
-import type { Initialize, RequestInit, Response } from '../types/Options';
+import type { Initialize, RequestInit, Response } from '../@types/Options';
 import BuildCommand from './command';
 import { BuildResponse, ProcessResponse } from './response';
-import { type CacheType } from '../types/Options';
+import { type CacheType } from '../@types/Options';
 import { md5 } from '../models/utils';
 
 export default async function Http<T = any>(

@@ -36,16 +36,6 @@ npm install bun-curl2
 yarn add bun-curl2
 ```
 
-If you plan on using caching, install Redis as well:
-
-```bash
-bun i redis 
-# or
-npm install redis
-# or
-yarn add redis
-```
-
 And configure the redis server on your side.
 
 ## Usage

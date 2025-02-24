@@ -1,4 +1,4 @@
-import type { Initialize, RawResponse, RequestInit } from '../types/Options';
+import type { Initialize, RawResponse, RequestInit } from '../@types/Options';
 import Headers from '../models/headers';
 
 class ResponseWrapper<T> {
