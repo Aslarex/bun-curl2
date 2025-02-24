@@ -81,9 +81,9 @@ console.log('Response:', response.text());
 - **Proxy Support:**  
   Easily proxy the requests by providing it.
   Supported formats:
-   > ip:port
-   > ip:port:user:pass
-   > user:pass@ip:port
+   - ip:port
+   - ip:port:user:pass
+   - user:pass@ip:port
   all of the formats can have protocol optionally as a prefix. 
 
 - **Custom Headers & Body:**  
