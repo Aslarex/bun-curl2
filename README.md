@@ -19,20 +19,19 @@ BunCurl2 is a high-performance, fetch-like HTTP client built with [Bun](https://
   Customize TLS versions and cipher suites (for TLS1.2 and TLS1.3) to meet your security requirements.
 
 - **Optional Redis Caching:**  
-  Improve performance by caching responses. Redis is loaded dynamically, making it optional.
+  Improve performance by caching responses.  
+  **Note:** For caching to work, you must both configure your Redis server **and** have the Redis package installed in your project.
 
 - **Customizable Transformations:**  
   Transform request and response options via user-supplied functions for full control over HTTP interactions.
 
 ## Installation
 
-Install BunCurl2 via bun or npm or yarn. Redis is an optional dependency, so caching functionality will work only if Redis is installed.
+Install BunCurl2 via bun or npm or yarn. Redis is an optional dependency, so caching functionality will work only if Redis is installed **and** properly configured.
 
 ```bash
 bun add bun-curl2 
 ```
-
-And configure the redis server on your side.
 
 ## Usage
 
@@ -90,7 +89,8 @@ console.log('Response:', response.json());
   Specify TLS versions and cipher suites for secure communication.
 
 - **Dynamic Redis Caching:**  
-  Enable caching with optional Redis support to store and reuse responses for improved performance.
+  Enable caching with optional Redis support to store and reuse responses for improved performance.  
+  **Important:** Ensure that your Redis server is configured correctly and that you have installed the Redis package in your project.
 
 ## Under the Hood
 
