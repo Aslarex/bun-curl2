@@ -116,6 +116,7 @@ export default function BuildCommand<T>(
             .map(([key, value]) => [key, String(value)] as [string, string])
         );
 
+  // Set default user agent if there is none in headers and we have one initialized
   if (!headers.has('user-agent') && initialized.defaultAgent) {
     command.push('-A', initialized.defaultAgent);
   }
@@ -126,7 +127,7 @@ export default function BuildCommand<T>(
   }
 
   // Append headers to command.
-  for (const [key, value] of headers) {
+  for (const [key, value] of (headers as unknown as Iterable<[string, string]>)) {
     command.push('-H', `${key}: ${value}`);
   }
 

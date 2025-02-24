@@ -1,5 +1,5 @@
 {
-  "name": "bun-curl",
+  "name": "curly-bun",
   "version": "1.0.0",
   "module": "index.ts",
   "type": "module",
@@ -9,11 +9,28 @@
   "peerDependencies": {
     "typescript": "^5"
   },
+  "author": {
+    "name": "Nicholas",
+    "url": "https://github.com/Aslarex",
+    "email": "nikbeka528@gmail.com"
+  },
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/Aslarex/bun-curl.git"
+  },
+  "types": "./dist/index.d.ts",
   "scripts": {
-    "dev": "DEBUG=* bun run --hot test/basic.ts",
-    "dev:cache": "DEBUG=* bun run --hot test/with_cache.ts",
+    "dev": "DEBUG=* bun run --hot examples/basic.ts",
+    "dev:cache": "DEBUG=* bun run --hot examples/with_cache.ts",
     "build": "rm -rf dist && tsc --project tsconfig.esm.json",
     "prettier": "prettier src/ --write"
+  },
+  "main": "./dist/index.js",
+  "exports": {
+    "require": "./dist/index.js",
+    "import": "./dist/index.js",
+    "node": "./dist/index.js",
+    "default": "./dist/index.js"
   },
   "dependencies": {
     "prettier": "^3.5.2"

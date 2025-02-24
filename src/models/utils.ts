@@ -1,3 +1,5 @@
+import * as crypto from 'crypto';
+
 export function hasJsonStructure(str: string): boolean {
   if (typeof str !== 'string') return false;
   try {
@@ -8,3 +10,8 @@ export function hasJsonStructure(str: string): boolean {
     return false;
   }
 }
+
+export function md5(str: string) {
+  return crypto.createHash('md5').update(str).digest('hex');
+}
+

@@ -1,6 +1,6 @@
-# BunCurl
+# CurlyBun
 
-BunCurl is a high-performance, fetch-like HTTP client built with [Bun](https://bun.sh) that leverages child processes and curl under the hood. Designed for speed—especially when using proxies—BunCurl supports HTTP/2 and HTTP/3 (if your system's curl supports them), advanced TLS configurations with custom ciphers and TLS versions, and optional caching via Redis.
+CurlyBun is a high-performance, fetch-like HTTP client built with [Bun](https://bun.sh) that leverages child processes and curl under the hood. Designed for speed—especially when using proxies—CurlyBun supports HTTP/2 and HTTP/3 (if your system's curl supports them), advanced TLS configurations with custom ciphers and TLS versions, and optional caching via Redis.
 
 > **Project Status:** This project is fairly new and still in active development. You may encounter bugs or errors—please report any issues on GitHub.
 
@@ -26,7 +26,7 @@ BunCurl is a high-performance, fetch-like HTTP client built with [Bun](https://b
 
 ## Installation
 
-Install BunCurl via bun or npm or yarn. Redis is an optional dependency, so caching functionality will work only if Redis is installed.
+Install CurlyBun via bun or npm or yarn. Redis is an optional dependency, so caching functionality will work only if Redis is installed.
 
 ```bash
 bun i bun-curl 
@@ -50,14 +50,14 @@ And configure the redis server on your side.
 
 ## Usage
 
-Below is a basic example using BunCurl for a GET request:
+Below is a basic example using CurlyBun for a GET request:
 
 ```ts
-import BunCurl from 'bun-curl';
+import CurlyBun from 'bun-curl';
 
 (async () => {
   // Create an instance with optional caching configuration.
-  const client = new BunCurl({
+  const client = new CurlyBun({
     defaultAgent: 'MyCustomUserAgent/1.0',
     compress: true,
     cache: {
@@ -89,7 +89,7 @@ import BunCurl from 'bun-curl';
   Configure proxies to improve request performance.
 
 - **Custom Headers & Body:**  
-  Pass headers and request body (as a string or object). BunCurl automatically sets the appropriate `Content-Type`.
+  Pass headers and request body (as a string or object). CurlyBun automatically sets the appropriate `Content-Type`.
 
 - **TLS & Cipher Settings:**  
   Specify TLS versions and cipher suites for secure communication.
@@ -100,7 +100,7 @@ import BunCurl from 'bun-curl';
 ## Under the Hood
 
 - **Bun Child Processes & curl:**  
-  BunCurl uses Bun's child process capabilities to execute curl commands, delivering impressive speed improvements.
+  CurlyBun uses Bun's child process capabilities to execute curl commands, delivering impressive speed improvements.
 
 - **Optimized for High Traffic:**  
   This library is designed for use in high-traffic projects where thousands of clients surf daily. As such, it will be updated frequently and quickly to meet performance and reliability demands.

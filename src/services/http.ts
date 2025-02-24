@@ -2,11 +2,7 @@ import type { Initialize, RequestInit, Response } from '../types/Options';
 import BuildCommand from './command';
 import { BuildResponse, ProcessResponse } from './response';
 import { type CacheType } from '../types/Options';
-import crypto from 'crypto';
-
-function md5(str: string) {
-  return crypto.createHash('md5').update(str).digest('hex');
-}
+import { md5 } from '../models/utils';
 
 export default async function Http<T = any>(
   url: string,
