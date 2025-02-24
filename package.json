@@ -1,6 +1,6 @@
 {
   "name": "curly-bun",
-  "version": "1.0.0",
+  "version": "0.0.1",
   "module": "index.ts",
   "type": "module",
   "devDependencies": {
@@ -16,7 +16,7 @@
   },
   "repository": {
     "type": "git",
-    "url": "git+https://github.com/Aslarex/bun-curl.git"
+    "url": "git+https://github.com/Aslarex/curly-bun.git"
   },
   "types": "./dist/index.d.ts",
   "scripts": {

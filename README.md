@@ -29,11 +29,11 @@ CurlyBun is a high-performance, fetch-like HTTP client built with [Bun](https://
 Install CurlyBun via bun or npm or yarn. Redis is an optional dependency, so caching functionality will work only if Redis is installed.
 
 ```bash
-bun i bun-curl 
+bun i curly-bun 
 # or
-npm install bun-curl
+npm install curly-bun
 # or
-yarn add bun-curl
+yarn add curly-bun
 ```
 
 If you plan on using caching, install Redis as well:

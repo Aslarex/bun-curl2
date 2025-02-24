@@ -71,4 +71,6 @@ class BunCurl {
   }
 }
 
+export { Http };
+
 export default BunCurl;
