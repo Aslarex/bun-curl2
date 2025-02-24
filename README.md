@@ -53,7 +53,7 @@ And configure the redis server on your side.
 Below is a basic example using CurlyBun for a GET request:
 
 ```ts
-import CurlyBun from 'bun-curl';
+import CurlyBun from 'curly-bun';
 
 (async () => {
   // Create an instance with optional caching configuration.
@@ -79,8 +79,19 @@ import CurlyBun from 'bun-curl';
   const response = await client.get('https://api.example.com/data');
 
   console.log('Status:', response.status);
-  console.log('Response:', await response.json());
+  console.log('Response:', response.json());
 })();
+```
+
+Or if you only want to use it directly like fetch:
+
+```ts
+import Http from "curly-bun/services/http";
+
+const response = await Http("https://www.example.com");
+
+console.log('Status:', response.status);
+console.log('Response:', response.json());
 ```
 
 ## Advanced Options
