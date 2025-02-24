@@ -1,4 +1,3 @@
-```
 # BunCurl
 
 BunCurl is a high-performance, fetch-like HTTP client built with Bun (bun.sh) that leverages child processes and curl under the hood. Designed for speed—especially when using proxies—BunCurl supports HTTP/2 and HTTP/3 (if your system's curl supports them), advanced TLS configurations with custom ciphers and TLS versions, and optional caching via Redis.
@@ -27,9 +26,11 @@ BunCurl is a high-performance, fetch-like HTTP client built with Bun (bun.sh) th
 
 ## Installation
 
-Install BunCurl via npm or yarn. Redis is an optional dependency, so caching functionality will work only if Redis is installed.
+Install BunCurl via bun or npm or yarn. Redis is an optional dependency, so caching functionality will work only if Redis is installed.
 
 ```bash
+burn i bun-curl 
+# or
 npm install bun-curl
 # or
 yarn add bun-curl
@@ -38,6 +39,8 @@ yarn add bun-curl
 If you plan on using caching, install Redis as well:
 
 ```bash
+burn i redis 
+# or
 npm install redis
 # or
 yarn add redis
@@ -107,4 +110,3 @@ Contributions are welcome! If you encounter issues or have suggestions, please o
 ## License
 
 MIT License
-```
