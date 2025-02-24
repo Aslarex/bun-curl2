@@ -13,7 +13,7 @@ BunCurl2 is a high-performance, fetch-like HTTP client built with [Bun](https://
   Executes requests using Bun's child processes and curl, making it significantly faster than the native fetch in many scenarios, especially when proxies are used.
 
 - **HTTP/2 & HTTP/3 Support:**  
-  Automatically selects HTTP/2 or HTTP/3 if supported by your system's curl.
+  Defaults to HTTP/2, can be overriden by `http` property. Make sure your **cURL** version supports HTTP/3 if you want to use it.
 
 - **Advanced TLS & Cipher Configuration:**  
   Customize TLS versions and cipher suites (for TLS1.2 and TLS1.3) to meet your security requirements.
@@ -27,8 +27,7 @@ BunCurl2 is a high-performance, fetch-like HTTP client built with [Bun](https://
 
 ## Installation
 
-Install BunCurl2 via bun or npm or yarn. Redis is an optional dependency, so caching functionality will work only if Redis is installed **and** properly configured.
-
+Installing BunCurl2 is straightforward and easy.
 ```bash
 bun add bun-curl2 
 ```
@@ -74,16 +73,21 @@ import { Http } from "bun-curl2";
 const response = await Http("https://www.example.com");
 
 console.log('Status:', response.status);
-console.log('Response:', response.json());
+console.log('Response:', response.text());
 ```
 
 ## Advanced Options
 
 - **Proxy Support:**  
-  Configure proxies to improve request performance.
+  Easily proxy the requests by providing it.
+  Supported formats:
+   > ip:port
+   > ip:port:user:pass
+   > user:pass@ip:port
+  all of the formats can have protocol optionally as a prefix. 
 
 - **Custom Headers & Body:**  
-  Pass headers and request body (as a string or object). BunCurl2 automatically sets the appropriate `Content-Type`.
+  Pass headers and request body (as a string or object). BunCurl2 automatically sets the appropriate `Content-Type` if not provided in headers.
 
 - **TLS & Cipher Settings:**  
   Specify TLS versions and cipher suites for secure communication.
@@ -98,7 +102,7 @@ console.log('Response:', response.json());
   BunCurl2 uses Bun's child process capabilities to execute curl commands, delivering impressive speed improvements.
 
 - **Optimized for High Traffic:**  
-  This library is designed for use in high-traffic projects where thousands of clients surf daily. As such, it will be updated frequently and quickly to meet performance and reliability demands.
+  I am using this library
 
 ## Contributing
 
