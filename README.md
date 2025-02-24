@@ -1,6 +1,6 @@
-# CurlyBun
+# BunCurl2
 
-CurlyBun is a high-performance, fetch-like HTTP client built with [Bun](https://bun.sh) that leverages child processes and curl under the hood. Designed for speed—especially when using proxies—CurlyBun supports HTTP/2 and HTTP/3 (if your system's curl supports them), advanced TLS configurations with custom ciphers and TLS versions, and optional caching via Redis.
+BunCurl2 is a high-performance, fetch-like HTTP client built with [Bun](https://bun.sh) that leverages child processes and curl under the hood. Designed for speed—especially when using proxies—BunCurl2 supports HTTP/2 and HTTP/3 (if your system's curl supports them), advanced TLS configurations with custom ciphers and TLS versions, and optional caching via Redis.
 
 > **Project Status:** This project is fairly new and still in active development. You may encounter bugs or errors—please report any issues on GitHub.
 
@@ -26,14 +26,14 @@ CurlyBun is a high-performance, fetch-like HTTP client built with [Bun](https://
 
 ## Installation
 
-Install CurlyBun via bun or npm or yarn. Redis is an optional dependency, so caching functionality will work only if Redis is installed.
+Install BunCurl2 via bun or npm or yarn. Redis is an optional dependency, so caching functionality will work only if Redis is installed.
 
 ```bash
-bun i curly-bun 
+bun i bun-curl2 
 # or
-npm install curly-bun
+npm install bun-curl2
 # or
-yarn add curly-bun
+yarn add bun-curl2
 ```
 
 If you plan on using caching, install Redis as well:
@@ -50,43 +50,41 @@ And configure the redis server on your side.
 
 ## Usage
 
-Below is a basic example using CurlyBun for a GET request:
+Below is a basic example using BunCurl2 for a GET request:
 
 ```ts
-import CurlyBun from 'curly-bun';
+import BunCurl2 from 'bun-curl2';
 
-(async () => {
-  // Create an instance with optional caching configuration.
-  const client = new CurlyBun({
-    defaultAgent: 'MyCustomUserAgent/1.0',
-    compress: true,
-    cache: {
-      options: {
-        url: 'redis://localhost:6379'
-      },
-      defaultExpiration: 60, // Cache expiration in seconds
+// Create an instance with optional caching configuration.
+const client = new BunCurl2({
+  defaultAgent: 'MyCustomUserAgent/1.0',
+  compress: true,
+  cache: {
+    options: {
+      url: 'redis://localhost:6379'
     },
-    transfomRequest: (opts) => {
-      // Modify options as needed...
-      return opts;
-    },
-  });
+    defaultExpiration: 60, // Cache expiration in seconds
+  },
+  transfomRequest: (opts) => {
+    // Modify options as needed...
+    return opts;
+  },
+});
 
-  // Initialize cache if needed
-  await client.initializeCache();
+// Initialize cache if needed
+await client.initializeCache();
 
-  // Perform a GET request
-  const response = await client.get('https://api.example.com/data');
+// Perform a GET request
+const response = await client.get('https://api.example.com/data');
 
-  console.log('Status:', response.status);
-  console.log('Response:', response.json());
-})();
+console.log('Status:', response.status);
+console.log('Response:', response.json());
 ```
 
 Or if you only want to use it directly like fetch:
 
 ```ts
-import Http from "curly-bun/services/http";
+import { Http } from "bun-curl2";
 
 const response = await Http("https://www.example.com");
 
@@ -100,7 +98,7 @@ console.log('Response:', response.json());
   Configure proxies to improve request performance.
 
 - **Custom Headers & Body:**  
-  Pass headers and request body (as a string or object). CurlyBun automatically sets the appropriate `Content-Type`.
+  Pass headers and request body (as a string or object). BunCurl2 automatically sets the appropriate `Content-Type`.
 
 - **TLS & Cipher Settings:**  
   Specify TLS versions and cipher suites for secure communication.
@@ -111,7 +109,7 @@ console.log('Response:', response.json());
 ## Under the Hood
 
 - **Bun Child Processes & curl:**  
-  CurlyBun uses Bun's child process capabilities to execute curl commands, delivering impressive speed improvements.
+  BunCurl2 uses Bun's child process capabilities to execute curl commands, delivering impressive speed improvements.
 
 - **Optimized for High Traffic:**  
   This library is designed for use in high-traffic projects where thousands of clients surf daily. As such, it will be updated frequently and quickly to meet performance and reliability demands.

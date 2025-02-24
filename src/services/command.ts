@@ -127,7 +127,7 @@ export default function BuildCommand<T>(
   }
 
   // Append headers to command.
-  for (const [key, value] of (headers as unknown as Iterable<[string, string]>)) {
+  for (const [key, value] of headers as unknown as Iterable<[string, string]>) {
     command.push('-H', `${key}: ${value}`);
   }
 
