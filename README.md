@@ -80,11 +80,10 @@ console.log('Response:', response.text());
 
 - **Proxy Support:**  
   Easily proxy the requests by providing it.
-  Supported formats:
+  Supported formats (all of them can have protocol optionally as a prefix):
    - ip:port
    - ip:port:user:pass
    - user:pass@ip:port
-  all of the formats can have protocol optionally as a prefix. 
 
 - **Custom Headers & Body:**  
   Pass headers and request body (as a string or object). BunCurl2 automatically sets the appropriate `Content-Type` if not provided in headers.
