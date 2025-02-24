@@ -46,6 +46,8 @@ npm install redis
 yarn add redis
 ```
 
+And configure the redis server on your side.
+
 ## Usage
 
 Below is a basic example using BunCurl for a GET request:
