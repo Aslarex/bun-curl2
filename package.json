@@ -6,10 +6,7 @@
     "url": "https://github.com/Aslarex",
     "email": "mail@aslarex.com"
   },
-  "repository": {
-    "type": "git",
-    "url": "git+https://github.com/Aslarex/bun-curl2.git"
-  },
+  "repository": "https://github.com/Aslarex/bun-curl2",
   "keywords": [
     "bun",
     "buncurl",
@@ -19,6 +16,7 @@
     "bunsh"
   ],
   "description": "blazing fast, fetch-like HTTP client built with Bun and curl in TypeScript.",
+  "license": "MIT",
   "scripts": {
     "dev": "DEBUG=* bun run --hot examples/basic.ts",
     "dev:cache": "DEBUG=* bun run --hot examples/with_cache.ts",
