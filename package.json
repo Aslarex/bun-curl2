@@ -1,6 +1,6 @@
 {
   "name": "bun-curl2",
-  "version": "0.0.4",
+  "version": "0.0.5",
   "type": "module",
   "module": "./dist/index.js",
   "devDependencies": {
@@ -11,7 +11,7 @@
   "author": {
     "name": "Nicholas",
     "url": "https://github.com/Aslarex",
-    "email": "nikbeka528@gmail.com"
+    "email": "mail@aslarex.com"
   },
   "repository": {
     "type": "git",
@@ -21,7 +21,7 @@
   "scripts": {
     "dev": "DEBUG=* bun run --hot examples/basic.ts",
     "dev:cache": "DEBUG=* bun run --hot examples/with_cache.ts",
-    "build": "rm -rf dist && tsc",
+    "build": "rm -rf dist && tsc --project tsconfig.json",
     "prettier": "prettier src/ --write"
   },
   "main": "./dist/index.js",
