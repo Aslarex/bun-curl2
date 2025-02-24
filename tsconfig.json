@@ -1,19 +1,18 @@
 {
   "compilerOptions": {
-    "lib": ["ESNext", "DOM", "DOM.Iterable", "DOM.AsyncIterable"],
-    "module": "ESNext",
-    "target": "esnext",
+    "target": "ES2021",
+    "lib": ["ESNext", "DOM", "ScriptHost"],
+    "module": "ES2022",
+    "moduleResolution": "node",
+    "types": ["bun-types"],
     "declaration": true,
-    "moduleDetection": "force",
-    "strict": true,
-    "downlevelIteration": true,
-    "skipLibCheck": true,
-    "jsx": "react-jsx",
-    "allowSyntheticDefaultImports": true,
+    "outDir": "./dist",
+    "removeComments": true,
+    "esModuleInterop": true,
     "forceConsistentCasingInFileNames": true,
-    "rootDir": "./src",
-    "outDir": "./dist"
+    "strict": true,
+    "skipLibCheck": true
   },
-  "include": ["src"],
+  "include": ["src/**/*"],
   "exclude": ["node_modules/**/*", "dist"]
 }

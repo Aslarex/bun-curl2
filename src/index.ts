@@ -1,10 +1,9 @@
 import Http from './services/http';
-import type { CacheType, Initialize, RequestInit } from './@types/Options';
-import { type RedisClientType } from 'redis';
+import type { CacheType, Initialize, RedisServer, RequestInit } from './@types/Options';
 
 class BunCurl {
   private cache?: {
-    server: RedisClientType;
+    server: RedisServer;
     defaultExpiration?: number;
   };
 
@@ -23,10 +22,11 @@ class BunCurl {
         this.cache = {
           server: redis.createClient(
             this.args.cache.options
-          ) as RedisClientType,
+          ),
           defaultExpiration: this.args.cache.defaultExpiration,
         };
       }
+      await this.cache?.server.connect();
     } catch (e: any) {
       throw new Error(
         'Initializing cache has failed, perhaps redis is not installed?' + e

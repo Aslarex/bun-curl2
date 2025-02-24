@@ -1,12 +1,18 @@
-import type { RedisClientOptions, RedisClientType } from 'redis';
+import type { RedisClientOptions } from 'redis';
 import CustomHeaders from '../models/headers';
+
+interface RedisServer {
+  connect: () => Promise<RedisServer>,
+  get: (key: string) => Promise<string | null>,
+  set: (key: string, value: string, options: { EX?: number }) => Promise<string | null>
+}
 
 interface BaseCache {
   defaultExpiration?: number;
 }
 
 type CacheType =
-  | (BaseCache & { server: RedisClientType; options?: never })
+  | (BaseCache & { server: RedisServer; options?: never })
   | (BaseCache & { options: RedisClientOptions; server?: never })
   | (BaseCache & { server?: never; options?: never });
 
@@ -130,4 +136,4 @@ type RawResponse = {
   parseResponse: boolean;
 };
 
-export type { RequestInit, Response, CacheType, Initialize, RawResponse };
+export type { RequestInit, Response, CacheType, Initialize, RawResponse, RedisServer };
