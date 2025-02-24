@@ -1,4 +1,5 @@
-```
+---
+
 # BunCurl
 
 BunCurl is a high-performance, fetch-like HTTP client for Node.js powered by [Bun](https://bun.sh) that leverages native child processes and curl under the hood. It’s built to be blazing fast—especially when using proxies—and supports modern HTTP protocols (HTTP/2 & HTTP/3), advanced TLS configuration, and optional caching via Redis.
@@ -90,7 +91,7 @@ BunCurl supports a wide range of options similar to the standard fetch API with 
   Set headers and a request body as either a plain object or string. BunCurl automatically sets the appropriate `Content-Type`.
 
 - **TLS & Cipher Options:**  
-  Pass TLS options to configure supported protocols and cipher suites for TLS1.2/TLS1.3, and more.
+  Pass TLS options to configure supported protocols, cipher suites for TLS1.2/TLS1.3, and more.
 
 - **HTTP Versions:**  
   Automatically selects the HTTP version based on the request. If a proxy is set, HTTP/2 is used by default. You can also override this by passing an `http.version` option.
@@ -109,10 +110,3 @@ BunCurl supports a wide range of options similar to the standard fetch API with 
 ## Contributing
 
 Contributions are welcome! Feel free to open issues, fork the repository, and submit pull requests. Please follow our code style and add tests where appropriate.
-
-## License
-
-MIT License
-```
-
-Feel free to adjust any sections to better match your project's specifics.
