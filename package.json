@@ -1,6 +1,6 @@
 {
   "name": "bun-curl2",
-  "version": "0.0.9",
+  "version": "0.0.10",
   "author": {
     "name": "Nicholas",
     "url": "https://github.com/Aslarex",
@@ -32,12 +32,10 @@
   "type": "module",
   "module": "./dist/index.js",
   "files": ["dist"],
-  "dependencies": {
-    "prettier": "^3.5.2"
-  },
   "types": "./dist/index.d.ts",
   "optionalDependencies": {
-    "redis": "^4.7.0"
+    "redis": "^4.7.0",
+    "prettier": "^3.5.2"
   },
   "devDependencies": {
     "@types/bun": "latest",
