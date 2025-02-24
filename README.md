@@ -29,7 +29,7 @@ BunCurl is a high-performance, fetch-like HTTP client built with Bun (bun.sh) th
 Install BunCurl via bun or npm or yarn. Redis is an optional dependency, so caching functionality will work only if Redis is installed.
 
 ```bash
-burn i bun-curl 
+bun i bun-curl 
 # or
 npm install bun-curl
 # or
@@ -39,7 +39,7 @@ yarn add bun-curl
 If you plan on using caching, install Redis as well:
 
 ```bash
-burn i redis 
+bun i redis 
 # or
 npm install redis
 # or
