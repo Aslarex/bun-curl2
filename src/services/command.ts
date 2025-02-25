@@ -84,14 +84,18 @@ export default function BuildCommand<T>(
     );
   }
 
-  if (options.http?.version === 1.1 && (options.http?.keepAlive !== undefined || options.http?.keepAliveProbes !== undefined)) {
+  if (
+    options.http?.version === 1.1 &&
+    (options.http?.keepAlive !== undefined ||
+      options.http?.keepAliveProbes !== undefined)
+  ) {
     if (options.http.keepAlive === false || options.http.keepAlive === 0) {
       command.push(CURL.NO_KEEPALIVE);
     }
-    if (typeof options.http.keepAlive === "number") {
+    if (typeof options.http.keepAlive === 'number') {
       command.push(CURL.KEEPALIVE_TIME, String(options.http.keepAlive));
     }
-    if (typeof options.http.keepAliveProbes === "number") {
+    if (typeof options.http.keepAliveProbes === 'number') {
       command.push(CURL.KEEPALIVE_CNT, String(options.http.keepAliveProbes));
     }
   }

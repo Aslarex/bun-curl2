@@ -15,7 +15,7 @@ interface RedisServer {
   /**
    * Gracefully close a client's connection to Redis. Wait for commands in process, but reject any new commands.
    */
-  disconnect: () => Promise<void>;  
+  disconnect: () => Promise<void>;
 
   /**
    * Retrieves the value associated with the specified key from the Redis server.

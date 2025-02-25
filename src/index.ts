@@ -15,7 +15,8 @@ class BunCurl {
   constructor(private args: Initialize & { cache?: CacheType } = {}) {}
 
   async initializeCache(): Promise<boolean> {
-    if (!this.args.cache) return new Promise<boolean>(resolve => resolve(false));
+    if (!this.args.cache)
+      return new Promise<boolean>(resolve => resolve(false));
     try {
       if (this.args.cache.server) {
         this.cache = {
@@ -34,14 +35,16 @@ class BunCurl {
       }
       return true;
     } catch (e) {
-      const cacheInitializationError = new Error("Initializing cache has failed, perhaps redis is not installed?");
+      const cacheInitializationError = new Error(
+        'Initializing cache has failed, perhaps redis is not installed?'
+      );
       Object.defineProperties(cacheInitializationError, {
         code: {
-          value: "ERR_CACHE_INITIALIZATION",
+          value: 'ERR_CACHE_INITIALIZATION',
         },
         cause: {
-          value: e
-        }
+          value: e,
+        },
       });
       throw cacheInitializationError;
     }
