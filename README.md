@@ -1,8 +1,8 @@
 # BunCurl2
 
-BunCurl2 is a high-performance, fetch-like HTTP client built with [Bun](https://bun.sh) that leverages child processes and curl under the hood. Designed for speed—especially when using proxies—BunCurl2 supports HTTP/2 and HTTP/3 (if your system's curl supports them), advanced TLS configurations with custom ciphers and TLS versions, and optional caching via Redis.
+BunCurl2 is a high-performance, fetch-like HTTP client built with [Bun](https://bun.sh) that leverages child processes and cURL under the hood. BunCurl2 supports HTTP/2 and HTTP/3 (if your system's curl supports them), advanced TLS configurations with custom ciphers and TLS versions, and optional caching via Redis.
 
-> **Project Status:** This project is fairly new and still in active development. You may encounter bugs or errors—please report any issues on GitHub.
+## [Changelog](./CHANGELOG.md)
 
 ## Features
 

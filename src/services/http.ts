@@ -1,4 +1,4 @@
-import type { Initialize, RequestInit, Response } from '../@types/Options';
+import type { GlobalInit, RequestInit, ResponseInit } from '../@types/Options';
 import BuildCommand from './command';
 import { BuildResponse, ProcessResponse } from './response';
 import { type CacheType } from '../@types/Options';
@@ -7,11 +7,11 @@ import { md5 } from '../models/utils';
 export default async function Http<T = any>(
   url: string,
   options: RequestInit = {},
-  init: Initialize & { cache?: Omit<CacheType, 'options'> } = {}
-): Promise<Response<T>> {
+  init: GlobalInit & { cache?: Omit<CacheType, 'options'> } = {}
+): Promise<ResponseInit<T>> {
   const startTime = performance.now();
 
-  options.parseResponse = options.parseResponse ?? true;
+  options.parseResponse = options.parseResponse ?? init.parseResponse ?? true;
   init.cache &&
     (init.cache.defaultExpiration = init.cache.defaultExpiration ?? 5);
 
@@ -93,17 +93,6 @@ export default async function Http<T = any>(
 
   await proc.exited;
 
-  if (key && init.cache?.server && options.cache) {
-    const expirationSeconds =
-      typeof options.cache === 'object' && options.cache.expire
-        ? options.cache.expire
-        : init.cache.defaultExpiration!;
-    await init.cache.server.set(key, stdout, {
-      EX: expirationSeconds,
-      NX: true,
-    });
-  }
-
   const response = ProcessResponse(
     url,
     stdout,
@@ -112,6 +101,28 @@ export default async function Http<T = any>(
   );
 
   const builtResponse = BuildResponse<T>(response, options, init);
+
+  if (key && init.cache?.server && options.cache) {
+    // Return response early to prevent caching if user provided validation function and response did not pass the test.
+    if (
+      typeof options.cache === 'object' &&
+      options.cache.validate
+    ) {
+      const validate = options.cache.validate(builtResponse);
+      const lateValidation = validate instanceof Promise ? await validate : validate;
+      if (!lateValidation) return builtResponse;
+    }
+
+    const expirationSeconds =
+      typeof options.cache === 'object' && options.cache.expire
+        ? options.cache.expire
+        : init.cache.defaultExpiration!;
+
+    await init.cache.server.set(key, stdout, {
+      EX: expirationSeconds,
+      NX: true,
+    });
+  }
 
   return options.transformResponse
     ? options.transformResponse(builtResponse)

@@ -1,5 +1,11 @@
 # Changelog
 
+## [0.0.19] - 2025-02-25
+
+- Added cache validation support via function. Can be both asynchronous and synchronous
+- Added `parseResponse` global support in `BunCurl2` options
+- `transformResponse` now accepts promise responses
+
 ## [0.0.18] - 2025-02-25
 
 - Added transfomResponse support

@@ -72,7 +72,7 @@ type CacheType =
 /**
  * Initialization options for configuring requests.
  */
-type Initialize = {
+type GlobalInit = {
   /**
    * Transforms the outgoing request options before the request is sent.
    *
@@ -95,6 +95,13 @@ type Initialize = {
    * Maximum allowed size of the request body in megabytes.
    */
   maxBodySize?: number;
+
+  /**
+   * Determines whether the response body should be automatically parsed as JSON.
+   *
+   * @default true
+   */
+  parseResponse?: boolean;
 };
 
 /**
@@ -175,7 +182,7 @@ interface ExtraOptions<T> {
    *
    * @param args - The initial RequestInit object.
    * @returns A transformed RequestInit object.
-   * @overrides Initialized.transformRequest
+   * @override GlobalInit.transformRequest
    */
   transformRequest?:
     | ((args: RequestInit & { url: string }) => RequestInit)
@@ -187,7 +194,7 @@ interface ExtraOptions<T> {
    * @param args - The original Response object.
    * @returns A transformed Response object.
    */
-  transformResponse?: (args: Response<T>) => Response<T>;
+  transformResponse?: (args: ResponseInit<T>) => ResponseInit<T> | Promise<ResponseInit>;
 
   /**
    * Determines whether the response body should be automatically parsed as JSON.
@@ -202,12 +209,14 @@ interface ExtraOptions<T> {
    * Can be a simple boolean to enable/disable caching or an object with detailed cache options.
    * - `expire`: The expiration time for the cache in seconds.
    * - `keys`: An array of keys (from RequestInit) to be considered for caching.
+   * - `validate`: Function to validate if request is eligible for caching.
    */
   cache?:
     | boolean
     | {
         expire?: number;
         keys?: (keyof RequestInit)[];
+        validate?: (response: ResponseInit<T>) => boolean | Promise<boolean>;
       };
 }
 
@@ -258,7 +267,7 @@ interface RequestInit<T = any>
  *
  * @template T - The type of the response data.
  */
-interface Response<T = any> {
+interface ResponseInit<T = any> {
   /**
    * The response payload.
    */
@@ -346,7 +355,7 @@ interface Response<T = any> {
 /**
  * Represents the raw response details from an HTTP request.
  */
-type RawResponse = {
+type BaseResponseInit = {
   /**
    * The URL from which the response was fetched.
    */
@@ -384,16 +393,17 @@ type RawResponse = {
 
   /**
    * Flag indicating if the response should be parsed automatically.
+   * @override GlobalInit.parseResponse
    */
   parseResponse: boolean;
 };
 
 export type {
   RequestInit,
-  Response,
+  ResponseInit,
   CacheType,
-  Initialize,
-  RawResponse,
+  GlobalInit,
+  BaseResponseInit,
   RedisServer,
   BaseRequestInit,
   BaseCache,

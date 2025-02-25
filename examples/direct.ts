@@ -1,8 +1,7 @@
-import Http from "../src/services/http";
+import { fetch } from '../src';
 
-
-// DEFAULT METHOD is always GET
-
-const req = await Http("https://www.example.com");
+const req = await fetch('https://www.example.com', {
+    parseResponse: false
+});
 
 console.log(req);

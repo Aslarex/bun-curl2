@@ -1,4 +1,4 @@
-import type { Initialize, RawResponse, RequestInit } from '../@types/Options';
+import type { GlobalInit, BaseResponseInit, RequestInit } from '../@types/Options';
 import Headers from '../models/headers';
 
 class ResponseWrapper<T> {
@@ -53,9 +53,9 @@ class ResponseWrapper<T> {
  * Build the response object
  */
 function BuildResponse<T>(
-  responseData: RawResponse,
+  responseData: BaseResponseInit,
   options: RequestInit<T>,
-  initialized: Initialize
+  initialized: GlobalInit
 ): ResponseWrapper<T> {
   if (initialized.maxBodySize) {
     const MAX_BODY_SIZE = initialized.maxBodySize * 1024 * 1024;
@@ -121,7 +121,7 @@ function ProcessResponse(
   stdout: string,
   startTime: number,
   parse: boolean
-): RawResponse {
+): BaseResponseInit {
   // Use a regex to match header blocks that start at the beginning of a line.
   // The regex looks for a line beginning with "HTTP/<version> <status>"
   // followed by any characters (including newlines) until a double newline (the header/body separator).

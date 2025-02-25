@@ -1,4 +1,4 @@
-import type { Initialize, RequestInit } from '../@types/Options';
+import type { GlobalInit, RequestInit } from '../@types/Options';
 import { CURL, CIPHERS } from '../models/constants';
 import formatProxyString from '../models/proxy';
 import { hasJsonStructure } from '../models/utils';
@@ -18,7 +18,7 @@ function determineContentType(body: string): string {
 export default function BuildCommand<T>(
   url: string,
   options: RequestInit<T>,
-  initialized: Initialize
+  initialized: GlobalInit
 ) {
   // Validate URL.
   new URL(url);

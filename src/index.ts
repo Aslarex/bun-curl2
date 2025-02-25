@@ -1,10 +1,10 @@
 import HTTPRequest from './services/http';
 import type {
   RequestInit,
-  Response,
+  ResponseInit,
   CacheType,
-  Initialize,
-  RawResponse,
+  GlobalInit,
+  BaseResponseInit,
   RedisServer,
   BaseRequestInit,
   BaseCache,
@@ -12,10 +12,10 @@ import type {
 
 export type {
   RequestInit,
-  Response,
+  BaseResponseInit,
   CacheType,
-  Initialize,
-  RawResponse,
+  GlobalInit,
+  ResponseInit,
   RedisServer,
   BaseRequestInit,
   BaseCache,
@@ -34,7 +34,7 @@ class BunCurl2 {
     defaultExpiration?: number;
   };
 
-  constructor(private args: Initialize & { cache?: CacheType } = {}) {}
+  constructor(private args: GlobalInit & { cache?: CacheType } = {}) {}
 
   async initializeCache(): Promise<boolean> {
     if (!this.args.cache)
