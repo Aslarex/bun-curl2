@@ -3,7 +3,6 @@ import BunCurl from "../src";
 
 const testWithCache = new BunCurl({
     cache: {
-        options: {},
         defaultExpiration: 3 // 3 seconds
     }
 });
@@ -12,10 +11,16 @@ await testWithCache.initializeCache();
 
 const first_request = await testWithCache.get("https://www.example.com", { cache: true });
 
+await Bun.sleep(2000);
+
 const second_request = await testWithCache.get("https://www.example.com", { cache: true });
 
-console.log(`Did first request gave response from cache: ${first_request.cached}`);
+await Bun.sleep(1500);
 
-console.log(`Did second request gave response from cache: ${second_request.cached}`);
+const third_request = await testWithCache.get("https://www.example.com", { cache: true });
 
-process.exit();
+console.log("Cache Tests", {
+    firstRequest: first_request.cached,
+    secondRequest: second_request.cached,
+    thirdRequest: third_request.cached
+});

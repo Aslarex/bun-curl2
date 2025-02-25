@@ -1,6 +1,6 @@
 {
   "name": "bun-curl2",
-  "version": "0.0.15",
+  "version": "0.0.16",
   "author": {
     "name": "Nicholas",
     "url": "https://github.com/Aslarex",
@@ -18,8 +18,9 @@
   "description": "blazing fast, fetch-like HTTP client built with Bun and curl in TypeScript.",
   "license": "MIT",
   "scripts": {
-    "dev": "DEBUG=* bun run --hot examples/basic.ts",
-    "dev:cache": "DEBUG=* bun run --hot examples/with_cache.ts",
+    "dev": "DEBUG=* bun run examples/basic.ts",
+    "dev:cache": "DEBUG=* bun run examples/with_cache.ts",
+    "dev:abort": "DEBUG=* bun run examples/abort.ts",
     "build": "rm -rf dist && tsc --project tsconfig.json",
     "prettier": "prettier src/ --write"
   },

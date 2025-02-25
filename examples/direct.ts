@@ -6,6 +6,3 @@ import Http from "../src/services/http";
 const req = await Http("https://www.example.com");
 
 console.log(req);
-
-
-process.exit();

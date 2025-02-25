@@ -19,7 +19,7 @@ class ResponseWrapper<T> {
   ) {}
 
   /**
-   * Returns the body as a parsed JSON object, or raw if parsing fails.
+   * Returns the body as a parsed JSON object.
    */
   json(): T {
     if (this.#parsedJson) return this.#parsedJson;
@@ -61,7 +61,13 @@ function BuildResponse<T>(
     const MAX_BODY_SIZE = initialized.maxBodySize * 1024 * 1024;
 
     if (responseData.body.length > MAX_BODY_SIZE) {
-      throw new Error('Max body size exceeded: ' + responseData.body.length);
+      const maxBodySizeError = new Error(
+        `Maximum body size exceeded [${responseData.body.length / (1024 * 1024)}]`
+      );
+      Object.defineProperty(maxBodySizeError, 'code', {
+        value: 'ERR_BODY_SIZE_EXCEEDED',
+      });
+      throw maxBodySizeError;
     }
   }
 
@@ -127,7 +133,11 @@ function ProcessResponse(
   const matches = [...stdout.matchAll(headerRegex)];
 
   if (matches.length === 0) {
-    throw new Error('No header block found in the response.');
+    const invalidBodyError = new Error(`Received unknown response (${stdout})`);
+    Object.defineProperty(invalidBodyError, 'code', {
+      value: 'ERR_INVALID_RESPONSE_BODY',
+    });
+    throw invalidBodyError;
   }
 
   // Select the last header block (the final response headers).

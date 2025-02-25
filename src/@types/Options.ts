@@ -13,6 +13,11 @@ interface RedisServer {
   connect: () => Promise<RedisServer>;
 
   /**
+   * Gracefully close a client's connection to Redis. Wait for commands in process, but reject any new commands.
+   */
+  disconnect: () => Promise<void>;  
+
+  /**
    * Retrieves the value associated with the specified key from the Redis server.
    *
    * @param key - The key whose value is to be retrieved.
@@ -25,10 +30,19 @@ interface RedisServer {
    *
    * @param key - The key to be set.
    * @param value - The value to be stored.
-   * @param options - Optional settings; supports EX (expiration in seconds).
+   * @param options - Optional settings; supports EX (expiration in seconds), NX (Only set the key if it does not already exist).
    * @returns A promise that resolves to the stored value as a string, or null.
    */
-  set: (key: string, value: string, options: { EX?: number }) => Promise<string | null>;
+  set: (
+    key: string,
+    value: string,
+    options: { EX?: number; NX?: true }
+  ) => Promise<string | null>;
+
+  /**
+   * Determines if the connection is open
+   */
+  isOpen: boolean;
 }
 
 /**
@@ -37,6 +51,7 @@ interface RedisServer {
 interface BaseCache {
   /**
    * The default expiration time for cached entries in seconds.
+   * @default 5
    */
   defaultExpiration?: number;
 }
@@ -64,7 +79,7 @@ type Initialize = {
    * @param args - The initial RequestInit object.
    * @returns A transformed RequestInit object.
    */
-  transfomRequest?: (args: RequestInit) => RequestInit;
+  transfomRequest?: (args: RequestInit & { url: string }) => RequestInit;
 
   /**
    * Enables response compression if set to true.
@@ -111,20 +126,32 @@ interface Connection {
   /**
    * HTTP-specific connection settings.
    */
-  http?: {
-    /**
-     * HTTP protocol version.
-     */
-    version?: 3.0 | 2.0 | 1.1;
-    /**
-     * Time (in seconds) to keep the connection alive.
-     */
-    keepAlive?: number;
-    /**
-     * Number of probes to check if the connection is still alive.
-     */
-    keepAliveProbes?: number;
-  };
+  http?:
+    | {
+        /**
+         * HTTP protocol version.
+         */
+        version: 1.1;
+        /**
+         * The keep-alive setting for the connection.
+         *
+         * When set to a number, it represents the time in seconds to keep the connection alive.
+         * When set to a boolean, it indicates whether to enable (true) or disable (false) the keep-alive feature.
+         */
+        keepAlive?: number | boolean;
+        /**
+         * Number of probes to check if the connection is still alive.
+         */
+        keepAliveProbes?: number;
+      }
+    | {
+        /**
+         * HTTP protocol version.
+         *
+         * In these versions, the keepAlive and keepAliveProbes options are not available.
+         */
+        version?: 3.0 | 2.0;
+      };
 
   /**
    * Connection timeout duration in milliseconds.
@@ -150,7 +177,7 @@ interface ExtraOptions<T> {
    * @returns A transformed RequestInit object.
    * @overrides Initialized.transformRequest
    */
-  transformRequest?: (args: RequestInit<T>) => RequestInit<T>;
+  transformRequest?: (args: RequestInit & { url: string }) => RequestInit;
 
   /**
    * Function to transform the response before it is returned to the caller.
@@ -185,9 +212,8 @@ interface ExtraOptions<T> {
 /**
  * Basic request initialization options.
  *
- * @template T - The type associated with the request body.
  */
-interface BaseRequestInit<T> {
+interface BaseRequestInit {
   /**
    * The request body, which can be a string or an object.
    */
@@ -207,6 +233,11 @@ interface BaseRequestInit<T> {
    * Flag or count indicating if and how redirects should be followed.
    */
   follow?: boolean | number;
+
+  /**
+   * An AbortSignal to set request's signal.
+   */
+  signal?: AbortSignal;
 }
 
 /**
@@ -215,7 +246,10 @@ interface BaseRequestInit<T> {
  *
  * @template T - The type associated with the request body.
  */
-interface RequestInit<T = any> extends BaseRequestInit<T>, ExtraOptions<T>, Connection {}
+interface RequestInit<T = any>
+  extends BaseRequestInit,
+    ExtraOptions<T>,
+    Connection {}
 
 /**
  * Represents an HTTP response with additional metadata.
@@ -352,4 +386,11 @@ type RawResponse = {
   parseResponse: boolean;
 };
 
-export type { RequestInit, Response, CacheType, Initialize, RawResponse, RedisServer };
+export type {
+  RequestInit,
+  Response,
+  CacheType,
+  Initialize,
+  RawResponse,
+  RedisServer,
+};

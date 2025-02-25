@@ -20,7 +20,6 @@ BunCurl2 is a high-performance, fetch-like HTTP client built with [Bun](https://
 
 - **Optional Redis Caching:**  
   Improve performance by caching responses.  
-  **Note:** For caching to work, you must both configure your Redis server **and** have the Redis package installed in your project.
 
 - **Customizable Transformations:**  
   Transform request and response options via user-supplied functions for full control over HTTP interactions.
@@ -47,7 +46,7 @@ const client = new BunCurl2({
     options: {
       url: 'redis://localhost:6379'
     },
-    defaultExpiration: 60, // Cache expiration in seconds
+    defaultExpiration: 60, // Default entries expiration in seconds
   },
   transfomRequest: (opts) => {
     // Modify options as needed...
@@ -59,10 +58,10 @@ const client = new BunCurl2({
 await client.initializeCache();
 
 // Perform a GET request
-const response = await client.get('https://api.example.com/data');
+const req = await client.get<Record<string, string>>('https://api.example.com/data', { cache: { keys: ["headers"] /** Properties that will be used that will be transformed to cache key, DEFAULT: **`headers, body, proxy, method`** */ } });
 
-console.log('Status:', response.status);
-console.log('Response:', response.json());
+console.log('Status:', req.status /* number */);
+console.log('Response:', req.response /* Record<string, string> */);
 ```
 
 Or if you only want to use it directly like fetch:
@@ -70,10 +69,10 @@ Or if you only want to use it directly like fetch:
 ```ts
 import { Http } from "bun-curl2";
 
-const response = await Http("https://www.example.com");
+const req = await Http<string>("https://www.example.com");
 
-console.log('Status:', response.status);
-console.log('Response:', response.text());
+console.log('Status:', req.status /* number */);
+console.log('Response:', req.response /* string */);
 ```
 
 ## Advanced Options

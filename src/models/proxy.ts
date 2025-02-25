@@ -58,7 +58,9 @@ export default function formatProxyString(
     const [credentials, hostPort] = input.split('@');
     const [username, password] = credentials.split(':');
     if (!username || !password) {
-      throw new Error('Invalid credentials format. Expected "username:password".');
+      throw new Error(
+        'Invalid credentials format. Expected "username:password".'
+      );
     }
     const [host, port] = hostPort.split(':');
     if (!isValidHost(host)) {
@@ -94,7 +96,9 @@ export default function formatProxyString(
       throw new Error('Invalid port.');
     }
     if (!username || !password) {
-      throw new Error('Invalid credentials. Username and password must be provided.');
+      throw new Error(
+        'Invalid credentials. Username and password must be provided.'
+      );
     }
     return `${protocol}://${username}:${password}@${host}:${port}`;
   } else {

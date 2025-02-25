@@ -1,13 +1,7 @@
 import type { Initialize, RequestInit } from '../@types/Options';
-import Ciphers from '../models/ciphers';
+import { CURL, CIPHERS } from '../models/constants';
 import formatProxyString from '../models/proxy';
 import { hasJsonStructure } from '../models/utils';
-
-const httpVersionList = {
-  3.0: '--http3',
-  2.0: '--http2',
-  1.1: '--http1.1',
-};
 
 function determineContentType(body: string): string {
   if (hasJsonStructure(body)) {
@@ -30,64 +24,76 @@ export default function BuildCommand<T>(
   new URL(url);
 
   if (options.transformRequest) {
-    options = options.transformRequest(options);
+    options = options.transformRequest({ url, ...options });
   } else if (initialized.transfomRequest) {
-    options = initialized.transfomRequest(options);
+    options = initialized.transfomRequest({ url, ...options });
   }
 
   // Set default values.
   const maxTime = options.maxTime ?? 10;
   const connectionTimeout = options.connectionTimeout ?? 5;
   const compress = initialized.compress ?? true;
-  const ciphers_tls12 = options.tls?.ciphers?.TLS12 ?? Ciphers['TLS12'];
-  const ciphers_tls13 = options.tls?.ciphers?.TLS13 ?? Ciphers['TLS13'];
+  const ciphers_tls12 = options.tls?.ciphers?.TLS12 ?? CIPHERS['TLS12'];
+  const ciphers_tls13 = options.tls?.ciphers?.TLS13 ?? CIPHERS['TLS13'];
   const tls_versions = options.tls?.versions ?? [1.3, 1.2];
   const httpVersion = options.proxy ? 2.0 : (options.http?.version ?? 2.0);
 
   // Build the base curl command.
   const command: string[] = [
-    'curl',
-    '-i',
-    '-m',
+    CURL.BASE,
+    CURL.INFO,
+    CURL.TIMEOUT,
     String(maxTime),
-    '--connect-timeout',
+    CURL.CONNECT_TIMEOUT,
     String(connectionTimeout),
-    httpVersionList[httpVersion],
+    CURL.HTTP_VERSION[httpVersion],
   ];
 
   if (tls_versions.includes(1.2)) {
     command.push(
-      '--tlsv1.2',
-      '--ciphers',
+      CURL.TLSv1_2,
+      CURL.CIPHERS,
       Array.isArray(ciphers_tls12) ? ciphers_tls12.join(':') : ciphers_tls12
     );
   }
 
   if (tls_versions.includes(1.3)) {
     const delta = tls_versions.includes(1.2)
-      ? ['--tls-max', '1.3']
-      : ['--tlsv1.3'];
+      ? [CURL.TLS_MAX, '1.3']
+      : [CURL.TLSv1_3];
     command.push(
       ...delta,
-      '--tls13-ciphers',
+      CURL.TLS13_CIPHERS,
       Array.isArray(ciphers_tls13) ? ciphers_tls13.join(':') : ciphers_tls13
     );
   }
 
   if (compress) {
-    command.push('--compressed');
+    command.push(CURL.COMPRESSED);
   }
 
   if (options.proxy) {
-    command.push('--proxy', formatProxyString(options.proxy));
+    command.push(CURL.PROXY, formatProxyString(options.proxy));
   }
 
   if (options.follow !== undefined) {
     command.push(
-      '--follow',
-      '--max-redirs',
+      CURL.FOLLOW,
+      CURL.MAX_REDIRS,
       typeof options.follow === 'number' ? String(options.follow) : '3'
     );
+  }
+
+  if (options.http?.version === 1.1 && (options.http?.keepAlive !== undefined || options.http?.keepAliveProbes !== undefined)) {
+    if (options.http.keepAlive === false || options.http.keepAlive === 0) {
+      command.push(CURL.NO_KEEPALIVE);
+    }
+    if (typeof options.http.keepAlive === "number") {
+      command.push(CURL.KEEPALIVE_TIME, String(options.http.keepAlive));
+    }
+    if (typeof options.http.keepAliveProbes === "number") {
+      command.push(CURL.KEEPALIVE_CNT, String(options.http.keepAliveProbes));
+    }
   }
 
   // Process the body once and determine finalBody.
@@ -101,7 +107,7 @@ export default function BuildCommand<T>(
     }
     // Add body data to command.
     if (finalBody !== undefined) {
-      command.push('--data-raw', finalBody);
+      command.push(CURL.DATA_RAW, finalBody);
     }
   }
 
@@ -118,7 +124,7 @@ export default function BuildCommand<T>(
 
   // Set default user agent if there is none in headers and we have one initialized
   if (!headers.has('user-agent') && initialized.defaultAgent) {
-    command.push('-A', initialized.defaultAgent);
+    command.push(CURL.USER_AGENT, initialized.defaultAgent);
   }
 
   // Set content-type header if missing and if a body exists.
@@ -128,10 +134,10 @@ export default function BuildCommand<T>(
 
   // Append headers to command.
   for (const [key, value] of headers as unknown as Iterable<[string, string]>) {
-    command.push('-H', `${key}: ${value}`);
+    command.push(CURL.HEADER, `${key}: ${value}`);
   }
 
-  command.push('-X', options.method?.toUpperCase() || 'GET');
+  command.push(CURL.METHOD, options.method?.toUpperCase() || 'GET');
 
   // Properly encode [ and ] in the URL.
   command.push(url.replace(/\[/g, '%5B').replace(/\]/g, '%5D'));
