@@ -30,7 +30,8 @@ console.log(example_get.response /** any */);
 const example_post = await testCurl.fetch<{ data: string }>("https://httpbin.org/post", {
     body: {
         json_key: "json_value"
-    }
+    },
+    transformRequest: false // disable global transform for this request
 });
 
 console.log(example_post.response /** { data: string } */);

@@ -1,12 +1,34 @@
-import Http from './services/http';
+import HTTPRequest from './services/http';
 import type {
+  RequestInit,
+  Response,
   CacheType,
   Initialize,
+  RawResponse,
   RedisServer,
-  RequestInit,
+  BaseRequestInit,
+  BaseCache,
 } from './@types/Options';
 
-class BunCurl {
+export type {
+  RequestInit,
+  Response,
+  CacheType,
+  Initialize,
+  RawResponse,
+  RedisServer,
+  BaseRequestInit,
+  BaseCache,
+};
+
+export {
+  HTTPRequest as Http,
+  HTTPRequest as HTTP,
+  HTTPRequest as fetch,
+  HTTPRequest,
+};
+
+class BunCurl2 {
   private cache?: {
     server: RedisServer;
     defaultExpiration?: number;
@@ -59,7 +81,7 @@ class BunCurl {
     method: RequestInit['method'],
     options: RequestInit<T> = {}
   ) {
-    return Http<T>(
+    return HTTPRequest<T>(
       url,
       { ...options, method },
       { ...this.args, cache: this.cache }
@@ -101,6 +123,4 @@ class BunCurl {
   }
 }
 
-export default BunCurl;
-
-export { Http, Http as HTTP, Http as fetch };
+export default BunCurl2;

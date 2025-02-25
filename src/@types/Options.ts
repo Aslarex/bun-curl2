@@ -177,7 +177,9 @@ interface ExtraOptions<T> {
    * @returns A transformed RequestInit object.
    * @overrides Initialized.transformRequest
    */
-  transformRequest?: (args: RequestInit & { url: string }) => RequestInit;
+  transformRequest?:
+    | ((args: RequestInit & { url: string }) => RequestInit)
+    | false;
 
   /**
    * Function to transform the response before it is returned to the caller.
@@ -393,4 +395,6 @@ export type {
   Initialize,
   RawResponse,
   RedisServer,
+  BaseRequestInit,
+  BaseCache,
 };

@@ -25,7 +25,10 @@ export default function BuildCommand<T>(
 
   if (options.transformRequest) {
     options = options.transformRequest({ url, ...options });
-  } else if (initialized.transfomRequest) {
+  } else if (
+    initialized.transfomRequest &&
+    options.transformRequest !== false
+  ) {
     options = initialized.transfomRequest({ url, ...options });
   }
 

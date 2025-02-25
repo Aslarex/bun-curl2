@@ -13,7 +13,7 @@ export default async function Http<T = any>(
 
   options.parseResponse = options.parseResponse ?? true;
   init.cache &&
-    (init.cache.defaultExpiration = init.cache.defaultExpiration || 5);
+    (init.cache.defaultExpiration = init.cache.defaultExpiration ?? 5);
 
   let key: string | undefined;
 
@@ -38,7 +38,14 @@ export default async function Http<T = any>(
           startTime,
           options.parseResponse
         );
-        return BuildResponse<T>({ ...response, cached: true }, options, init);
+        const builtResponse = BuildResponse<T>(
+          { ...response, cached: true },
+          options,
+          init
+        );
+        return options.transformResponse
+          ? options.transformResponse(builtResponse)
+          : builtResponse;
       } catch {}
     }
   }
@@ -104,5 +111,9 @@ export default async function Http<T = any>(
     options.parseResponse
   );
 
-  return BuildResponse<T>(response, options, init);
+  const builtResponse = BuildResponse<T>(response, options, init);
+
+  return options.transformResponse
+    ? options.transformResponse(builtResponse)
+    : builtResponse;
 }
