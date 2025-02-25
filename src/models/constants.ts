@@ -16,7 +16,7 @@ const CURL = {
   TLS13_CIPHERS: '--tls13-ciphers',
   COMPRESSED: '--compressed',
   PROXY: '--proxy',
-  FOLLOW: '--follow',
+  FOLLOW: '--location',
   MAX_REDIRS: '--max-redirs',
   NO_KEEPALIVE: '--no-keepalive',
   KEEPALIVE_TIME: '--keepalive-time',

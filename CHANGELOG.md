@@ -1,5 +1,10 @@
 # Changelog
 
+## [0.0.20] - 2025-03-25
+
+- **⚠️ IMPORTANT:** fixed incorrect argument name passed when `follow` property was provided (`--follow` **->** `--location`)
+- Fixed JSDoc comments being removed
+
 ## [0.0.19] - 2025-02-25
 
 - Added cache validation support via function. Can be both asynchronous and synchronous

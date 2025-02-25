@@ -7,7 +7,7 @@
     "types": ["bun-types"],
     "declaration": true,
     "outDir": "./dist",
-    "removeComments": true,
+    "removeComments": false,
     "esModuleInterop": true,
     "forceConsistentCasingInFileNames": true,
     "strict": true,
