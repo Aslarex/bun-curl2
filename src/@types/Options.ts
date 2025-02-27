@@ -62,12 +62,18 @@ interface BaseCache {
  * It supports one of the following three configurations:
  * - A Redis server based cache.
  * - A cache using Redis client options.
- * - A cache with neither server nor options defined.
+ * - A cache with neither server nor options defined with a mode: "redis".
+ * - A default mode cache
  */
 type CacheType =
-  | (BaseCache & { server: RedisServer; options?: never })
-  | (BaseCache & { options: RedisClientOptions; server?: never })
-  | (BaseCache & { server?: never; options?: never });
+  | (BaseCache & { server: RedisServer; options?: never; mode?: 'redis' })
+  | (BaseCache & {
+      options: RedisClientOptions;
+      server?: never;
+      mode?: 'redis';
+    })
+  | (BaseCache & { server?: never; options?: never; mode?: 'redis' })
+  | (BaseCache & { mode?: 'local' });
 
 /**
  * Initialization options for configuring requests.
@@ -185,7 +191,7 @@ interface ExtraOptions<T> {
    * @override GlobalInit.transformRequest
    */
   transformRequest?:
-    | ((args: RequestInit & { url: string }) => RequestInit)
+    | ((args: RequestInit<T> & { url: string }) => RequestInit<T>)
     | false;
 
   /**
@@ -194,7 +200,9 @@ interface ExtraOptions<T> {
    * @param args - The original Response object.
    * @returns A transformed Response object.
    */
-  transformResponse?: (args: ResponseInit<T>) => ResponseInit<T> | Promise<ResponseInit>;
+  transformResponse?: (
+    args: ResponseInit<T>
+  ) => ResponseInit<T> | Promise<ResponseInit<T>>;
 
   /**
    * Determines whether the response body should be automatically parsed as JSON.
@@ -220,6 +228,14 @@ interface ExtraOptions<T> {
       };
 }
 
+type BodyInit =
+  | string
+  | Record<string, any>
+  | Blob
+  | BufferSource
+  | FormData
+  | URLSearchParams;
+
 /**
  * Basic request initialization options.
  *
@@ -228,7 +244,7 @@ interface BaseRequestInit {
   /**
    * The request body, which can be a string or an object.
    */
-  body?: string | Record<string, any>;
+  body?: BodyInit;
 
   /**
    * The request headers.

@@ -1,4 +1,8 @@
-import type { GlobalInit, BaseResponseInit, RequestInit } from '../@types/Options';
+import type {
+  GlobalInit,
+  BaseResponseInit,
+  RequestInit,
+} from '../@types/Options';
 import Headers from '../models/headers';
 
 class ResponseWrapper<T> {
@@ -62,7 +66,7 @@ function BuildResponse<T>(
 
     if (responseData.body.length > MAX_BODY_SIZE) {
       const maxBodySizeError = new Error(
-        `Maximum body size exceeded [${responseData.body.length / (1024 * 1024)}]`
+        `[BunCurl2] - Maximum body size exceeded (${responseData.body.length / (1024 * 1024)})`
       );
       Object.defineProperty(maxBodySizeError, 'code', {
         value: 'ERR_BODY_SIZE_EXCEEDED',
@@ -133,7 +137,7 @@ function ProcessResponse(
   const matches = [...stdout.matchAll(headerRegex)];
 
   if (matches.length === 0) {
-    const invalidBodyError = new Error(`Received unknown response (${stdout})`);
+    const invalidBodyError = new Error(`[BunCurl2] - Received unknown response (${stdout})`);
     Object.defineProperty(invalidBodyError, 'code', {
       value: 'ERR_INVALID_RESPONSE_BODY',
     });

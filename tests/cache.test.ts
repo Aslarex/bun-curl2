@@ -2,16 +2,15 @@ import BunCurl2 from '../src';
 import { expect, test } from "bun:test";
 
 const Client = new BunCurl2({
-  cache: {},
+  cache: {
+    mode: "local", // test out the 0.0.21 local caching mode
+  },
 });
 
 
-test("cache validation", async () => {
+test("cache", async () => {
 
   await Client.initializeCache();
-
-  // Sleep for 1 second to make sure cache expired
-  await Bun.sleep(1000);
 
   const ShouldNotCache = await Client.get('https://www.example.com', {
     cache: {
@@ -22,7 +21,7 @@ test("cache validation", async () => {
   
   const ShouldNotCacheEither = await Client.get('https://www.example.com', {
     cache: {
-      validate: async () => new Promise<boolean>(resolve => resolve(false)),
+      validate: async () => false,
     },
     parseResponse: false
   });
@@ -40,6 +39,14 @@ test("cache validation", async () => {
     parseResponse: false
   });
 
+  await Bun.sleep(1000);
+
+  const ShouldBeExpired = await Client.get("https://www.example.com", {
+    cache: true,
+    parseResponse: false
+  });
+
+  // required if we want the process to exit after finish
   await Client.disconnectCache();
 
   expect(ShouldNotCache.cached).toBe(false);
@@ -50,4 +57,5 @@ test("cache validation", async () => {
 
   expect(ShouldReturnFromCache.cached).toBe(true);
 
+  expect(ShouldBeExpired.cached).toBe(false);
 });

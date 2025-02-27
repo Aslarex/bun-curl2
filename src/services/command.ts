@@ -1,28 +1,127 @@
 import type { GlobalInit, RequestInit } from '../@types/Options';
 import { CURL, CIPHERS } from '../models/constants';
 import formatProxyString from '../models/proxy';
-import { hasJsonStructure } from '../models/utils';
+import { determineContentType } from '../models/utils';
+import { Buffer } from 'buffer';
 
-function determineContentType(body: string): string {
-  if (hasJsonStructure(body)) {
-    return 'application/json;charset=UTF-8';
+/**
+ * Helper: Build a multipart/form-data payload from a FormData instance.
+ * Returns a Buffer payload and the boundary string.
+ */
+async function buildMultipartBody(
+  formData: FormData
+): Promise<{ body: Buffer; boundary: string }> {
+  const boundary =
+    '----WebKitFormBoundary' + Math.random().toString(36).substring(2);
+  const parts: Buffer[] = [];
+
+  // Collect all entries from FormData.
+  const entries: [string, FormDataEntryValue][] = [];
+  formData.forEach((value, key) => {
+    entries.push([key, value]);
+  });
+
+  // Loop over the collected entries sequentially.
+  for (const [key, value] of entries) {
+    let headers = `--${boundary}\r\nContent-Disposition: form-data; name="${key}"`;
+    let contentBuffer: Buffer;
+
+    if (value instanceof Blob) {
+      // For file fields, add filename and Content-Type.
+      const fileName = (value as File).name || 'file';
+      const fileType = (value as File).type || 'application/octet-stream';
+      headers += `; filename="${fileName}"\r\nContent-Type: ${fileType}\r\n\r\n`;
+      const arrayBuffer = await value.arrayBuffer();
+      contentBuffer = Buffer.from(arrayBuffer);
+    } else {
+      // For normal fields.
+      headers += '\r\n\r\n';
+      contentBuffer = Buffer.from(String(value), 'utf-8');
+    }
+
+    parts.push(Buffer.from(headers, 'utf-8'));
+    parts.push(contentBuffer);
+    parts.push(Buffer.from('\r\n', 'utf-8'));
   }
-  // Regex to check for URL-encoded form data.
-  const urlEncodedRegex = /^([^=&]+=[^=&]*)(?:&[^=&]+=[^=&]*)*$/;
-  if (urlEncodedRegex.test(body)) {
-    return 'application/x-www-form-urlencoded;charset=UTF-8';
-  }
-  return 'text/plain;charset=UTF-8';
+
+  // Append the closing boundary.
+  parts.push(Buffer.from(`--${boundary}--\r\n`, 'utf-8'));
+
+  return { body: Buffer.concat(parts), boundary };
 }
 
-export default function BuildCommand<T>(
+/**
+ * Helper: Prepare the request body.
+ * Converts various body types (string, object, URLSearchParams, FormData, Blob,
+ * ReadableStream, or BufferSource) into either a string or Buffer and returns
+ * any headers that need to be set.
+ */
+async function prepareRequestBody(
+  body: any
+): Promise<{ body: string | Buffer; type?: string }> {
+  // URLSearchParams: convert to URL-encoded string.
+  if (body instanceof URLSearchParams) {
+    return {
+      body: body.toString(),
+      type: 'application/x-www-form-urlencoded',
+    };
+  }
+
+  // FormData: build multipart/form-data.
+  if (body instanceof FormData) {
+    const { body: multipartBody, boundary } = await buildMultipartBody(body);
+    return {
+      body: multipartBody,
+      type: `multipart/form-data; boundary=${boundary}`,
+    };
+  }
+
+  // Blob: convert to Buffer.
+  if (body instanceof Blob) {
+    const arrayBuffer = await body.arrayBuffer();
+    return { body: Buffer.from(arrayBuffer) };
+  }
+
+  // ReadableStream: read and concatenate all chunks.
+  if (body instanceof ReadableStream) {
+    const chunks: Uint8Array[] = [];
+    const reader = body.getReader();
+    let done = false;
+    while (!done) {
+      const { value, done: streamDone } = await reader.read();
+      if (value) chunks.push(value);
+      done = streamDone;
+    }
+    return { body: Buffer.concat(chunks) };
+  }
+
+  // BufferSource: ArrayBuffer or TypedArray.
+  if (body instanceof ArrayBuffer || ArrayBuffer.isView(body)) {
+    return { body: Buffer.from(body as ArrayBuffer) };
+  }
+
+  // Plain object: assume JSON.
+  if (typeof body === 'object') {
+    return {
+      body: JSON.stringify(body),
+      type: 'application/json',
+    };
+  }
+
+  // Fallback: convert to string.
+  const strBody = String(body);
+  return { body: strBody, type: determineContentType(strBody) };
+}
+
+/**
+ * Main BuildCommand function.
+ * Constructs the curl command for Bun.spawn based on options.
+ */
+export default async function BuildCommand<T>(
   url: string,
   options: RequestInit<T>,
   initialized: GlobalInit
 ) {
-  // Validate URL.
-  new URL(url);
-
   if (options.transformRequest) {
     options = options.transformRequest({ url, ...options });
   } else if (
@@ -103,22 +202,7 @@ export default function BuildCommand<T>(
     }
   }
 
-  // Process the body once and determine finalBody.
-  let finalBody: string | undefined;
-  if (options.body) {
-    if (typeof options.body === 'object') {
-      // Convert any object (assuming it's plain) to JSON.
-      finalBody = JSON.stringify(options.body);
-    } else if (typeof options.body === 'string') {
-      finalBody = options.body;
-    }
-    // Add body data to command.
-    if (finalBody !== undefined) {
-      command.push(CURL.DATA_RAW, finalBody);
-    }
-  }
-
-  // Build headers.
+  // --- Build headers ---
   const headers: Headers = !options.headers
     ? new Headers()
     : options.headers instanceof Headers
@@ -129,22 +213,31 @@ export default function BuildCommand<T>(
             .map(([key, value]) => [key, String(value)] as [string, string])
         );
 
-  // Set default user agent if there is none in headers and we have one initialized
+  if (options.body) {
+    const prepared = await prepareRequestBody(options.body);
+
+    if (prepared.type && !headers.has('content-type')) {
+      headers.set('content-type', prepared.type);
+    }
+
+    if (typeof prepared.body === 'string') {
+      command.push(CURL.DATA_RAW, prepared.body);
+    } else {
+      command.push(CURL.DATA_RAW, prepared.body.toString('utf-8'));
+    }
+  }
+
+  // Set default user agent if not provided.
   if (!headers.has('user-agent') && initialized.defaultAgent) {
     command.push(CURL.USER_AGENT, initialized.defaultAgent);
   }
 
-  // Set content-type header if missing and if a body exists.
-  if (!headers.has('content-type') && finalBody !== undefined) {
-    headers.set('content-type', determineContentType(finalBody));
-  }
-
-  // Append headers to command.
+  // Append headers to the command.
   for (const [key, value] of headers as unknown as Iterable<[string, string]>) {
     command.push(CURL.HEADER, `${key}: ${value}`);
   }
 
-  command.push(CURL.METHOD, options.method?.toUpperCase() || 'GET');
+  command.push(CURL.METHOD, options.method!.toUpperCase());
 
   // Properly encode [ and ] in the URL.
   command.push(url.replace(/\[/g, '%5B').replace(/\]/g, '%5D'));

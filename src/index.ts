@@ -9,6 +9,8 @@ import type {
   BaseRequestInit,
   BaseCache,
 } from './@types/Options';
+import Headers from './models/headers';
+import { LocalCache } from './services/local_cache';
 
 export type {
   RequestInit,
@@ -26,39 +28,56 @@ export {
   HTTPRequest as HTTP,
   HTTPRequest as fetch,
   HTTPRequest,
+  Headers,
 };
 
 class BunCurl2 {
   private cache?: {
-    server: RedisServer;
+    server: RedisServer | LocalCache<string>;
     defaultExpiration?: number;
   };
 
   constructor(private args: GlobalInit & { cache?: CacheType } = {}) {}
 
   async initializeCache(): Promise<boolean> {
-    if (!this.args.cache)
-      return new Promise<boolean>(resolve => resolve(false));
+    if (!this.args.cache) return false;
+    this.args.cache.mode = this.args.cache.mode ?? 'redis';
     try {
-      if (this.args.cache.server) {
-        this.cache = {
-          server: this.args.cache.server,
-          defaultExpiration: this.args.cache.defaultExpiration,
-        };
-      } else {
-        const redis = await import('redis');
-        this.cache = {
-          server: redis.createClient(this.args.cache.options),
-          defaultExpiration: this.args.cache.defaultExpiration,
-        };
-      }
-      if (!this.cache.server.isOpen) {
-        await this.cache.server.connect();
+      switch (this.args.cache.mode) {
+        case 'local':
+          this.cache = {
+            server: new LocalCache<string>(),
+            defaultExpiration: this.args.cache.defaultExpiration,
+          };
+          break;
+        case 'redis':
+          if (this.args.cache.server) {
+            this.cache = {
+              server: this.args.cache.server,
+              defaultExpiration: this.args.cache.defaultExpiration,
+            };
+          } else {
+            const redis = await import('redis');
+            this.cache = {
+              server: redis.createClient(this.args.cache.options),
+              defaultExpiration: this.args.cache.defaultExpiration,
+            };
+          }
+          const server = this.cache.server as RedisServer;
+          if (!server.isOpen) {
+            await server.connect();
+          }
+          break;
+        default:
+          console.error(
+            `[BunCurl2] - Received invalid cache mode (${this.args.cache.mode})`
+          );
+          return false;
       }
       return true;
     } catch (e) {
       const cacheInitializationError = new Error(
-        'Initializing cache has failed, perhaps redis is not installed?'
+        '[BunCurl2] - Initializing cache has failed'
       );
       Object.defineProperties(cacheInitializationError, {
         code: {
@@ -73,7 +92,11 @@ class BunCurl2 {
   }
 
   async disconnectCache(): Promise<void> {
-    return this.cache?.server.disconnect();
+    const server = this.cache?.server;
+    if (!server) return void 0;
+    return server instanceof LocalCache
+      ? (server.end(), void 0)
+      : server?.disconnect();
   }
 
   private async request<T = any>(
@@ -96,30 +119,30 @@ class BunCurl2 {
     url: string,
     options?: Omit<RequestInit<T>, 'method' | 'body'>
   ) {
-    return this.request<T>(url, 'GET', options as RequestInit<T>);
+    return this.request<T>(url, 'GET', options);
   }
 
   async post<T = any>(url: string, options?: Omit<RequestInit<T>, 'method'>) {
-    return this.request<T>(url, 'POST', options as RequestInit<T>);
+    return this.request<T>(url, 'POST', options);
   }
 
   async delete<T = any>(url: string, options?: Omit<RequestInit<T>, 'method'>) {
-    return this.request<T>(url, 'DELETE', options as RequestInit<T>);
+    return this.request<T>(url, 'DELETE', options);
   }
 
   async put<T = any>(url: string, options?: Omit<RequestInit<T>, 'method'>) {
-    return this.request<T>(url, 'PUT', options as RequestInit<T>);
+    return this.request<T>(url, 'PUT', options);
   }
 
   async patch<T = any>(url: string, options?: Omit<RequestInit<T>, 'method'>) {
-    return this.request<T>(url, 'PATCH', options as RequestInit<T>);
+    return this.request<T>(url, 'PATCH', options);
   }
 
   async head<T = any>(
     url: string,
     options?: Omit<RequestInit<T>, 'method' | 'body'>
   ) {
-    return this.request<T>(url, 'HEAD', options as RequestInit<T>);
+    return this.request<T>(url, 'HEAD', options);
   }
 }
 

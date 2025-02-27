@@ -1,6 +1,12 @@
 # Changelog
 
-## [0.0.20] - 2025-03-25
+## [0.0.21] - 2025-02-28
+
+- Added a `local` cache mode! However redis is the default. [EXAMPLE](./examples/cache.ts)
+- `body` property now supports all the types that **fetch** has implemented (EXPERIMENTAL)
+- Some more typescript fixes
+
+## [0.0.20] - 2025-02-26
 
 - **⚠️ IMPORTANT:** fixed incorrect argument name passed when `follow` property was provided (`--follow` **->** `--location`)
 - Fixed JSDoc comments being removed
@@ -22,7 +28,7 @@
 - Added backwards compatibility in `package.json`
 
 ## [0.0.16] - 2025-02-25
-- Added AbortController signal support.
+- Added AbortController signal support. [EXAMPLE](./examples/abort.ts)
 - Fixed Redis logic and TTL issues.
 - Fixed response type propagation in `BunCurl2` methods.
 - Added `BunCurl2.disconnectCache` method.

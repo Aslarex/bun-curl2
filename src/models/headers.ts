@@ -7,7 +7,7 @@ import { types } from 'node:util';
 const validateHeaderName = (name: string): void => {
   if (!/^[\^`\-\w!#$%&'*+.|~]+$/.test(name)) {
     const error = new TypeError(
-      `Header name must be a valid HTTP token [${name}]`
+      `[BunCurl2] - Header name must be a valid HTTP token [${name}]`
     );
     Object.defineProperty(error, 'code', {
       value: 'ERR_INVALID_HTTP_TOKEN',
@@ -23,7 +23,7 @@ const validateHeaderName = (name: string): void => {
 const validateHeaderValue = (name: string, value: string): void => {
   if (/[^\t\u0020-\u007E\u0080-\u00FF]/.test(value)) {
     const error = new TypeError(
-      `Invalid character in header content ["${name}"]`
+      `[BunCurl2] - Invalid character in header content ["${name}"]`
     );
     Object.defineProperty(error, 'code', {
       value: 'ERR_INVALID_CHAR',
@@ -72,14 +72,14 @@ export default class Headers extends URLSearchParams {
         result.push(...Object.entries(init as Record<string, string>));
       } else {
         if (typeof method !== 'function') {
-          throw new TypeError('Header pairs must be iterable');
+          throw new TypeError('[BunCurl2] - Header pairs must be iterable');
         }
         // Iterable – exhaust, validate, and ensure each pair is [name, value]
         result = [...(init as Iterable<any>)]
           .map(pair => {
             if (typeof pair !== 'object' || types.isBoxedPrimitive(pair)) {
               throw new TypeError(
-                'Each header pair must be an iterable object'
+                '[BunCurl2] - Each header pair must be an iterable object'
               );
             }
             return [...pair] as string[];
@@ -87,7 +87,7 @@ export default class Headers extends URLSearchParams {
           .map(pair => {
             if (pair.length !== 2) {
               throw new TypeError(
-                'Each header pair must be a name/value tuple'
+                '[BunCurl2] - Each header pair must be a name/value tuple'
               );
             }
             return pair;
@@ -95,7 +95,7 @@ export default class Headers extends URLSearchParams {
       }
     } else {
       throw new TypeError(
-        "Failed to construct 'Headers': The provided value is not of type '(sequence<sequence<ByteString>> or record<ByteString, ByteString>)'"
+        "[BunCurl2] - Failed to construct 'Headers': The provided value is not of type '(sequence<sequence<ByteString>> or record<ByteString, ByteString>)'"
       );
     }
 

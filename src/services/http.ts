@@ -1,19 +1,33 @@
-import type { GlobalInit, RequestInit, ResponseInit } from '../@types/Options';
+import type {
+  GlobalInit,
+  RedisServer,
+  RequestInit,
+  ResponseInit,
+} from '../@types/Options';
 import BuildCommand from './command';
 import { BuildResponse, ProcessResponse } from './response';
-import { type CacheType } from '../@types/Options';
 import { md5 } from '../models/utils';
+import { LocalCache } from './local_cache';
 
 export default async function Http<T = any>(
   url: string,
-  options: RequestInit = {},
-  init: GlobalInit & { cache?: Omit<CacheType, 'options'> } = {}
+  options: RequestInit<T> = {},
+  init: GlobalInit & {
+    cache?: {
+      server: RedisServer | LocalCache<string>;
+      defaultExpiration?: number;
+    };
+  } = {}
 ): Promise<ResponseInit<T>> {
-  const startTime = performance.now();
+  // Validate URL
+  new URL(url);
 
+  const startTime = performance.now();
   options.parseResponse = options.parseResponse ?? init.parseResponse ?? true;
-  init.cache &&
-    (init.cache.defaultExpiration = init.cache.defaultExpiration ?? 5);
+  options.method = options.method ?? 'GET';
+  if (init.cache) {
+    init.cache.defaultExpiration = init.cache.defaultExpiration ?? 5;
+  }
 
   let key: string | undefined;
 
@@ -28,13 +42,14 @@ export default async function Http<T = any>(
       typeof options.cache === 'boolean' || !options.cache.keys
         ? defaultKeys.map(e => options[e])
         : options.cache.keys.map(e => options[e]);
-    key = md5(keys.join('|') + `|${url}`);
-    const cached_response = await init.cache.server.get(key);
-    if (cached_response) {
+    key = md5(`BunCurl2|${url}|` + keys.join('|'));
+
+    const getCachedRes = await init.cache.server.get(key);
+    if (getCachedRes) {
       try {
         const response = ProcessResponse(
           url,
-          cached_response,
+          getCachedRes,
           startTime,
           options.parseResponse
         );
@@ -46,17 +61,19 @@ export default async function Http<T = any>(
         return options.transformResponse
           ? options.transformResponse(builtResponse)
           : builtResponse;
-      } catch {}
+      } catch {
+      }
     }
   }
 
-  const cmd = BuildCommand<T>(url, options, init);
+  // Build the command and spawn the process
+  const cmd = await BuildCommand<T>(url, options, init);
   const proc = Bun.spawn(cmd, {
     stdout: 'pipe',
     stderr: 'pipe',
   });
 
-  // Create a promise that resolves when the process completes
+  // Promise to handle process output.
   const processPromise = (async () => {
     const stdout = Buffer.from(
       await new Response(proc.stdout).arrayBuffer()
@@ -64,7 +81,7 @@ export default async function Http<T = any>(
     return stdout;
   })();
 
-  // Create an abort promise that rejects when the signal is aborted.
+  // Abort promise to handle cancellation.
   const abortPromise = new Promise<never>((_resolve, reject) => {
     if (options.signal) {
       if (options.signal.aborted) {
@@ -82,10 +99,8 @@ export default async function Http<T = any>(
 
   let stdout: string;
   try {
-    // Race between the process finishing and the abort signal firing.
     stdout = await Promise.race([processPromise, abortPromise]);
   } finally {
-    // Remove the abort event listener if it's still attached.
     if (options.signal) {
       options.signal.removeEventListener('abort', () => {});
     }
@@ -99,29 +114,23 @@ export default async function Http<T = any>(
     startTime,
     options.parseResponse
   );
-
   const builtResponse = BuildResponse<T>(response, options, init);
 
   if (key && init.cache?.server && options.cache) {
-    // Return response early to prevent caching if user provided validation function and response did not pass the test.
-    if (
-      typeof options.cache === 'object' &&
-      options.cache.validate
-    ) {
-      const validate = options.cache.validate(builtResponse);
-      const lateValidation = validate instanceof Promise ? await validate : validate;
-      if (!lateValidation) return builtResponse;
+    if (typeof options.cache === 'object' && options.cache.validate) {
+      const validate = await options.cache.validate(builtResponse);
+      if (!validate) return builtResponse;
     }
-
     const expirationSeconds =
       typeof options.cache === 'object' && options.cache.expire
         ? options.cache.expire
         : init.cache.defaultExpiration!;
-
-    await init.cache.server.set(key, stdout, {
-      EX: expirationSeconds,
-      NX: true,
-    });
+    init.cache.server instanceof LocalCache
+      ? init.cache.server.set(key, stdout, expirationSeconds)
+      : await init.cache.server.set(key, stdout, {
+          EX: expirationSeconds,
+          NX: true,
+        });
   }
 
   return options.transformResponse
