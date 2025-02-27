@@ -1,6 +1,6 @@
 # Changelog
 
-## [0.0.21] - 2025-02-28
+## [0.0.21] & [0.0.22] - 2025-02-28
 
 - Added a `local` cache mode! However redis is the default. [EXAMPLE](./examples/cache.ts)
 - `body` property now supports all the types that **fetch** has implemented (EXPERIMENTAL)

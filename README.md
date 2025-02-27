@@ -1,5 +1,3 @@
----
-
 # BunCurl2 🚀
 
 BunCurl2 is a **super-fast, fetch-like HTTP client** for [Bun](https://bun.sh)! Built and maintained by me as a solo project, it leverages Bun’s child processes and cURL to deliver blazing performance, advanced TLS options, and flexible caching (default: Redis; optional: local).
