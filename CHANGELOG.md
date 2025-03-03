@@ -4,13 +4,13 @@
 
 ## [0.0.23] - 2025-03-03
 
-- Better error handling [EXAMPLE](./examples/error.ts);
+- Better error handling [[EXAMPLE]](./examples/error.ts)
 - if `follow` property value is **true**, then it will follow redirects up to 10 times.
 - `ResponseWrapper.url` value is now final destination url even after redirects.
 
 ## [0.0.21] & [0.0.22] - 2025-02-28
 
-- Added a `local` cache mode! However redis is the default. [EXAMPLE](./examples/cache.ts)
+- Added a `local` cache mode! However redis is the default. [[EXAMPLE]](./examples/cache.ts)
 - `body` property now supports all the types that **fetch** has implemented (EXPERIMENTAL)
 - Some more typescript fixes
 
@@ -36,7 +36,7 @@
 - Added backwards compatibility in `package.json`
 
 ## [0.0.16] - 2025-02-25
-- Added AbortController signal support. [EXAMPLE](./examples/abort.ts)
+- Added AbortController signal support. [[EXAMPLE]](./examples/abort.ts)
 - Fixed Redis logic and TTL issues.
 - Fixed response type propagation in `BunCurl2` methods.
 - Added `BunCurl2.disconnectCache` method.
