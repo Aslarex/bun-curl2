@@ -6,7 +6,7 @@ import type {
 } from '../@types/Options';
 import BuildCommand from './command';
 import { BuildResponse, ProcessResponse } from './response';
-import { md5 } from '../models/utils';
+import { extractFinalUrl, md5 } from '../models/utils';
 import { LocalCache } from './local_cache';
 
 export default async function Http<T = any>(
@@ -23,14 +23,17 @@ export default async function Http<T = any>(
   new URL(url);
 
   const startTime = performance.now();
-  options.parseResponse = options.parseResponse ?? init.parseResponse ?? true;
-  options.method = options.method ?? 'GET';
+
+  options.parseResponse ??= init.parseResponse ?? true;
+  options.method ??= 'GET';
+
   if (init.cache) {
-    init.cache.defaultExpiration = init.cache.defaultExpiration ?? 5;
+    init.cache.defaultExpiration ??= 5;
   }
 
   let key: string | undefined;
 
+  // Handle caching if enabled.
   if (options.cache && init.cache?.server) {
     const defaultKeys: (keyof RequestInit)[] = [
       'headers',
@@ -62,23 +65,27 @@ export default async function Http<T = any>(
           ? options.transformResponse(builtResponse)
           : builtResponse;
       } catch {
+        // If processing cached response fails, continue to execute the command.
       }
     }
   }
 
-  // Build the command and spawn the process
+  // Build the command and spawn the process.
   const cmd = await BuildCommand<T>(url, options, init);
   const proc = Bun.spawn(cmd, {
     stdout: 'pipe',
     stderr: 'pipe',
   });
 
-  // Promise to handle process output.
-  const processPromise = (async () => {
-    const stdout = Buffer.from(
-      await new Response(proc.stdout).arrayBuffer()
-    ).toString('binary');
-    return stdout;
+  // Promises to capture stdout and stderr.
+  const stdoutPromise = (async () => {
+    const buffer = await new Response(proc.stdout).arrayBuffer();
+    return Buffer.from(buffer).toString('binary');
+  })();
+
+  const stderrPromise = (async () => {
+    const buffer = await new Response(proc.stderr).arrayBuffer();
+    return Buffer.from(buffer).toString('utf-8');
   })();
 
   // Abort promise to handle cancellation.
@@ -99,14 +106,30 @@ export default async function Http<T = any>(
 
   let stdout: string;
   try {
-    stdout = await Promise.race([processPromise, abortPromise]);
-  } finally {
-    if (options.signal) {
-      options.signal.removeEventListener('abort', () => {});
-    }
+    stdout = await Promise.race([stdoutPromise, abortPromise]);
+  } catch (error) {
+    throw error;
   }
 
   await proc.exited;
+
+  const stderrData = await stderrPromise;
+
+  // Check the exit code for errors.
+  if (proc.exitCode !== 0) {
+    const errorMessage = `[BunCurl2] - ${stderrData.trim().replace(/curl:\s*\(\d+\)\s*/, '')}`;
+    throw Object.assign(new Error(errorMessage), {
+      code: 'ERR_CURL_FAILED',
+      exitCode: proc.exitCode,
+    });
+  }
+
+  const extractURL = extractFinalUrl(stdout);
+
+  if (extractURL.finalUrl) {
+    url = extractURL.finalUrl;
+    stdout = extractURL.body;
+  }
 
   const response = ProcessResponse(
     url,
@@ -116,6 +139,7 @@ export default async function Http<T = any>(
   );
   const builtResponse = BuildResponse<T>(response, options, init);
 
+  // Update cache if necessary.
   if (key && init.cache?.server && options.cache) {
     if (typeof options.cache === 'object' && options.cache.validate) {
       const validate = await options.cache.validate(builtResponse);
@@ -125,12 +149,14 @@ export default async function Http<T = any>(
       typeof options.cache === 'object' && options.cache.expire
         ? options.cache.expire
         : init.cache.defaultExpiration!;
-    init.cache.server instanceof LocalCache
-      ? init.cache.server.set(key, stdout, expirationSeconds)
-      : await init.cache.server.set(key, stdout, {
-          EX: expirationSeconds,
-          NX: true,
-        });
+    if (init.cache.server instanceof LocalCache) {
+      init.cache.server.set(key, stdout, expirationSeconds);
+    } else {
+      await init.cache.server.set(key, stdout, {
+        EX: expirationSeconds,
+        NX: true,
+      });
+    }
   }
 
   return options.transformResponse

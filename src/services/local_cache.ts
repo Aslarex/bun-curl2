@@ -17,7 +17,7 @@ export class LocalCache<T = any> {
    * Stores a value with the given TTL (in seconds).
    */
   set(key: string, value: T, ttl: number): void {
-    const expiresAt = Date.now() + (ttl * 1000);
+    const expiresAt = Date.now() + ttl * 1000;
     this.data.set(key, { value, expiresAt });
   }
 

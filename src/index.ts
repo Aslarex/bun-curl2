@@ -11,6 +11,7 @@ import type {
 } from './@types/Options';
 import Headers from './models/headers';
 import { LocalCache } from './services/local_cache';
+import { ResponseWrapper } from './services/response';
 
 export type {
   RequestInit,
@@ -29,9 +30,10 @@ export {
   HTTPRequest as fetch,
   HTTPRequest,
   Headers,
+  ResponseWrapper,
 };
 
-class BunCurl2 {
+export class BunCurl2 {
   private cache?: {
     server: RedisServer | LocalCache<string>;
     defaultExpiration?: number;

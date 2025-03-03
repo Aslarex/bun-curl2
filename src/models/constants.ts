@@ -1,6 +1,9 @@
 // Define constants for CURL options.
 const CURL = {
   BASE: 'curl',
+  SILENT: '-s',
+  SHOW_ERROR: '-S',
+  WRITE_OUT: '-w',
   INFO: '-i',
   TIMEOUT: '-m',
   CONNECT_TIMEOUT: '--connect-timeout',

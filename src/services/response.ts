@@ -137,7 +137,9 @@ function ProcessResponse(
   const matches = [...stdout.matchAll(headerRegex)];
 
   if (matches.length === 0) {
-    const invalidBodyError = new Error(`[BunCurl2] - Received unknown response (${stdout})`);
+    const invalidBodyError = new Error(
+      `[BunCurl2] - Received unknown response (${stdout})`
+    );
     Object.defineProperty(invalidBodyError, 'code', {
       value: 'ERR_INVALID_RESPONSE_BODY',
     });

@@ -1,6 +1,6 @@
-import BunCurl from '../src';
+import BunCurl2 from '../src';
 
-const testCurl = new BunCurl({
+const testCurl = new BunCurl2({
   transfomRequest(args) {
     if (args.headers) {
       if (args.headers instanceof Headers) {
@@ -34,4 +34,10 @@ const example_post = await testCurl.fetch<{ data: string }>(
   }
 );
 
-console.log(example_post.response /** { data: string } */);
+console.log(example_post.response); // Should result in:
+/*
+<!DOCTYPE HTML PUBLIC "-//W3C//DTD HTML 3.2 Final//EN">
+<title>405 Method Not Allowed</title>
+<h1>Method Not Allowed</h1>
+<p>The method is not allowed for the requested URL.</p>
+*/

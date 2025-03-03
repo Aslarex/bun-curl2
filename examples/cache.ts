@@ -3,7 +3,7 @@ import BunCurl2 from '../src';
 const testWithCache = new BunCurl2({
   cache: {
     defaultExpiration: 3, // 3 seconds
-    mode: "local" // local in memory caching via map
+    mode: 'local', // local in memory caching via map
   },
 });
 

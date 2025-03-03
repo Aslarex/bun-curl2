@@ -144,6 +144,10 @@ export default async function BuildCommand<T>(
   const command: string[] = [
     CURL.BASE,
     CURL.INFO,
+    CURL.SILENT,
+    CURL.SHOW_ERROR,
+    CURL.WRITE_OUT,
+    '\nFinal-Url:%{url_effective}',
     CURL.TIMEOUT,
     String(maxTime),
     CURL.CONNECT_TIMEOUT,
@@ -178,11 +182,11 @@ export default async function BuildCommand<T>(
     command.push(CURL.PROXY, formatProxyString(options.proxy));
   }
 
-  if (options.follow !== undefined) {
+  if (options.follow !== undefined && options.follow !== false) {
     command.push(
       CURL.FOLLOW,
       CURL.MAX_REDIRS,
-      typeof options.follow === 'number' ? String(options.follow) : '3'
+      typeof options.follow === 'number' ? String(options.follow) : '10'
     );
   }
 

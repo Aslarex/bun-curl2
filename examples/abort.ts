@@ -12,7 +12,7 @@ const requestPromise = Http('https://reqres.in/api/users?delay=1', {
 setTimeout(() => {
   console.log('Aborting the request...');
   controller.abort();
-}, 300);
+}, 100);
 
 try {
   const res = await requestPromise;

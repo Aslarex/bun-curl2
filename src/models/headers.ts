@@ -310,7 +310,7 @@ Object.defineProperties(
  */
 export function fromRawHeaders(headers: string[] = []): Headers {
   const pairs = headers
-    .reduce((result: string[][], value, index, array) => {
+    .reduce((result: string[][], _value, index, array) => {
       if (index % 2 === 0) {
         result.push(array.slice(index, index + 2));
       }

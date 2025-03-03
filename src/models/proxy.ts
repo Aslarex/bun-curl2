@@ -11,13 +11,19 @@ function isValidPort(port: string): boolean {
 
 /**
  * Basic validation for an IP address or hostname.
- * (Extend this function if more strict checks are needed.)
  *
  * @param host - The host string.
  * @returns True if valid, false otherwise.
  */
 function isValidHost(host: string): boolean {
-  return host.length > 0;
+  if (!host) return false;
+  try {
+    // Prepend a dummy protocol so that the URL parser can validate the host.
+    const url = new URL(`http://${host}`);
+    return Boolean(url.hostname);
+  } catch {
+    return false;
+  }
 }
 
 /**
@@ -47,27 +53,25 @@ export default function formatProxyString(
   // Check if the input already starts with a protocol (e.g. "http://")
   const protocolMatch = input.match(/^([a-zA-Z][a-zA-Z0-9+.-]*):\/\//);
   if (protocolMatch) {
-    // Use the override if provided; otherwise, use the protocol from the input.
     protocol = protocolOverride || protocolMatch[1];
-    // Remove the protocol portion from the input.
     input = input.slice(protocolMatch[0].length);
   }
 
-  // Check if the input contains an "@" symbol (i.e. already formatted credentials: "user:pass@ip:port")
+  // Check if the input contains an "@" symbol (i.e. already formatted credentials: "username:password@ip:port")
   if (input.includes('@')) {
     const [credentials, hostPort] = input.split('@');
     const [username, password] = credentials.split(':');
     if (!username || !password) {
       throw new Error(
-        'Invalid credentials format. Expected "username:password".'
+        `[BunCurl2] - Invalid credentials format. Expected "username:password", received: ${input}`
       );
     }
     const [host, port] = hostPort.split(':');
     if (!isValidHost(host)) {
-      throw new Error('Invalid host.');
+      throw new Error(`[BunCurl2] - Invalid host: ${host}`);
     }
     if (!isValidPort(port)) {
-      throw new Error('Invalid port.');
+      throw new Error(`[BunCurl2] - Invalid port: ${port}`);
     }
     return `${protocol}://${credentials}@${host}:${port}`;
   }
@@ -79,10 +83,10 @@ export default function formatProxyString(
   if (parts.length === 2) {
     const [host, port] = parts;
     if (!isValidHost(host)) {
-      throw new Error('Invalid host.');
+      throw new Error(`[BunCurl2] - Invalid host: ${host}`);
     }
     if (!isValidPort(port)) {
-      throw new Error('Invalid port.');
+      throw new Error(`[BunCurl2] - Invalid port: ${port}`);
     }
     return `${protocol}://${host}:${port}`;
   }
@@ -90,20 +94,20 @@ export default function formatProxyString(
   else if (parts.length === 4) {
     const [host, port, username, password] = parts;
     if (!isValidHost(host)) {
-      throw new Error('Invalid host.');
+      throw new Error(`[BunCurl2] - Invalid host: ${host}`);
     }
     if (!isValidPort(port)) {
-      throw new Error('Invalid port.');
+      throw new Error(`[BunCurl2] - Invalid port: ${port}`);
     }
     if (!username || !password) {
       throw new Error(
-        'Invalid credentials. Username and password must be provided.'
+        `[BunCurl2] - Invalid credentials format. Expected "username:password", received: ${input}`
       );
     }
     return `${protocol}://${username}:${password}@${host}:${port}`;
   } else {
     throw new Error(
-      'Invalid input format. Expected either "ip:port", "ip:port:username:password", or an already formatted "username:password@ip:port", with an optional protocol prefix.'
+      `[BunCurl2] - Invalid input format: ${input}. Expected either "ip:port", "ip:port:username:password", or "username:password@ip:port", with an optional protocol prefix.`
     );
   }
 }
