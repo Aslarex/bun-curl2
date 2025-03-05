@@ -1,3 +1,5 @@
+import { $ } from 'bun';
+
 // Define constants for CURL options.
 const CURL = {
   BASE: 'curl',
@@ -38,4 +40,23 @@ const CIPHERS = {
     'TLS_AES_128_GCM_SHA256:TLS_AES_256_GCM_SHA384:TLS_CHACHA20_POLY1305_SHA256',
 };
 
-export { CURL, CIPHERS };
+const CURL_VERSION = (await $`curl --version`.quiet().text()).toLowerCase();
+
+const SUPPORTS_HTTP2 = CURL_VERSION.includes('http2');
+
+const SUPPORTS_HTTP3 = CURL_VERSION.includes('http3');
+
+const supportedTlsLibs = [
+  'openssl',
+  'libressl',
+  'boringssl',
+  'quictls',
+  'woflssl',
+  'gnutls',
+];
+
+const SUPPORTS_CIPHERS_ARGS = supportedTlsLibs.some(lib =>
+  CURL_VERSION.includes(lib)
+);
+
+export { CURL, CIPHERS, SUPPORTS_HTTP2, SUPPORTS_HTTP3, SUPPORTS_CIPHERS_ARGS };

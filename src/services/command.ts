@@ -1,5 +1,11 @@
 import type { GlobalInit, RequestInit } from '../@types/Options';
-import { CURL, CIPHERS } from '../models/constants';
+import {
+  CURL,
+  CIPHERS,
+  SUPPORTS_HTTP3,
+  SUPPORTS_HTTP2,
+  SUPPORTS_CIPHERS_ARGS,
+} from '../models/constants';
 import formatProxyString from '../models/proxy';
 import { determineContentType } from '../models/utils';
 import { Buffer } from 'buffer';
@@ -138,7 +144,9 @@ export default async function BuildCommand<T>(
   const ciphers_tls12 = options.tls?.ciphers?.TLS12 ?? CIPHERS['TLS12'];
   const ciphers_tls13 = options.tls?.ciphers?.TLS13 ?? CIPHERS['TLS13'];
   const tls_versions = options.tls?.versions ?? [1.3, 1.2];
-  const httpVersion = options.proxy ? 2.0 : (options.http?.version ?? 2.0);
+  const httpVersion =
+    options.http?.version ??
+    (SUPPORTS_HTTP3 ? 3.0 : SUPPORTS_HTTP2 ? 2.0 : 1.1);
 
   // Build the base curl command.
   const command: string[] = [
@@ -156,22 +164,26 @@ export default async function BuildCommand<T>(
   ];
 
   if (tls_versions.includes(1.2)) {
-    command.push(
-      CURL.TLSv1_2,
-      CURL.CIPHERS,
-      Array.isArray(ciphers_tls12) ? ciphers_tls12.join(':') : ciphers_tls12
-    );
+    command.push(CURL.TLSv1_2);
+    if (SUPPORTS_CIPHERS_ARGS) {
+      command.push(
+        CURL.CIPHERS,
+        Array.isArray(ciphers_tls12) ? ciphers_tls12.join(':') : ciphers_tls12
+      );
+    }
   }
 
   if (tls_versions.includes(1.3)) {
     const delta = tls_versions.includes(1.2)
       ? [CURL.TLS_MAX, '1.3']
       : [CURL.TLSv1_3];
-    command.push(
-      ...delta,
-      CURL.TLS13_CIPHERS,
-      Array.isArray(ciphers_tls13) ? ciphers_tls13.join(':') : ciphers_tls13
-    );
+    command.push(...delta);
+    if (SUPPORTS_CIPHERS_ARGS) {
+      command.push(
+        CURL.TLS13_CIPHERS,
+        Array.isArray(ciphers_tls13) ? ciphers_tls13.join(':') : ciphers_tls13
+      );
+    }
   }
 
   if (compress) {

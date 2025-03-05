@@ -109,9 +109,9 @@ export default async function Http<T = any>(
     stdout = await Promise.race([stdoutPromise, abortPromise]);
   } catch (error) {
     throw error;
+  } finally {
+    await proc.exited;
   }
-
-  await proc.exited;
 
   const stderrData = await stderrPromise;
 
@@ -121,6 +121,7 @@ export default async function Http<T = any>(
     throw Object.assign(new Error(errorMessage), {
       code: 'ERR_CURL_FAILED',
       exitCode: proc.exitCode,
+      options: { ...options, url },
     });
   }
 

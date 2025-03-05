@@ -2,6 +2,10 @@
 
 > **Note:** Dates are formatted as `yyyy-mm-dd`.
 
+## [0.0.24] - 2025-03-05
+
+- Mini update that should fix issues regarding http versions & tls ciphers in some versions of cURL
+
 ## [0.0.23] - 2025-03-03
 
 - Better error handling [[EXAMPLE]](./examples/error.ts)

@@ -1,6 +1,6 @@
 {
   "name": "bun-curl2",
-  "version": "0.0.23",
+  "version": "0.0.24",
   "author": {
     "name": "Nicholas",
     "url": "https://github.com/Aslarex",
@@ -22,7 +22,7 @@
   "scripts": {
     "dev": "DEBUG=* bun test --watch",
     "build": "rm -rf dist && tsc --project tsconfig.json",
-    "prettier": "prettier src/ tests/ examples/ --write"
+    "prettier": "prettier src/ tests/ examples/ bench/ --write"
   },
   "exports": {
     ".": {
