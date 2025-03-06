@@ -129,6 +129,6 @@ This is a solo project maintained by me. Feedback, issues, or pull requests are 
 
 ## 🏳️ License
 
-This project is licensed under the **[WTFPL](https://en.wikipedia.org/wiki/WTFPL)**.
+This project is licensed under the **[WTFPL](./LICENSE)**.
 
 ---
