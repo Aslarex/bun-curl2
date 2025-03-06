@@ -2,6 +2,14 @@
 
 > **Note:** Dates are formatted as `yyyy-mm-dd`.
 
+## [0.0.25] & [0.0.26] - 2025-03-06
+
+- Reduced build size by **~50%**
+- Little optimizations, full request now takes **~5%** less time and consumes less memory
+- Renamed `parseResponse` to `parseJSON`
+- You can now disable response compression per request by providing `compress: false` in request options
+- Added `dns` request property.
+
 ## [0.0.24] - 2025-03-05
 
 - Mini update that should fix issues regarding http versions & tls ciphers in some versions of cURL

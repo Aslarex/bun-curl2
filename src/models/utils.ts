@@ -1,12 +1,11 @@
 import * as crypto from 'crypto';
 
 /**
- * Helper: Determine if string is a valid stringified JSON
+ * Helper: Determine if string or object is a valid JSON
  */
-export function hasJsonStructure(str: string): boolean {
-  if (typeof str !== 'string') return false;
+export function hasJsonStructure(i: string | object): boolean {
   try {
-    const result = JSON.parse(str);
+    const result = typeof i === 'string' ? JSON.parse(i) : i;
     const type = Object.prototype.toString.call(result);
     return type === '[object Object]' || type === '[object Array]';
   } catch {

@@ -1,9 +1,9 @@
 {
   "compilerOptions": {
-    "target": "ES2021",
-    "lib": ["ESNext", "DOM", "ScriptHost"],
-    "module": "ES2022",
-    "moduleResolution": "node",
+    "target": "ESNext",
+    "lib": ["ESNext", "DOM"],
+    "module": "ESNext",
+    "moduleResolution": "bundler",
     "types": ["bun-types"],
     "declaration": true,
     "outDir": "./dist",
@@ -11,8 +11,8 @@
     "esModuleInterop": true,
     "forceConsistentCasingInFileNames": true,
     "strict": true,
-    "skipLibCheck": true
+    "skipLibCheck": true,
+    "allowSyntheticDefaultImports": true
   },
-  "include": ["src/**/*"],
-  "exclude": ["node_modules/**/*", "dist"]
+  "include": ["src/**/*"]
 }

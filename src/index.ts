@@ -8,7 +8,7 @@ import type {
   RedisServer,
   BaseRequestInit,
   BaseCache,
-} from './@types/Options';
+} from './types';
 import Headers from './models/headers';
 import { LocalCache } from './services/local_cache';
 import { ResponseWrapper } from './services/response';

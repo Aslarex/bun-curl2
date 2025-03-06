@@ -1,10 +1,12 @@
-import type { GlobalInit, RequestInit } from '../@types/Options';
+import type { GlobalInit, RequestInit } from '../types';
 import {
   CURL,
   CIPHERS,
   SUPPORTS_HTTP3,
   SUPPORTS_HTTP2,
   SUPPORTS_CIPHERS_ARGS,
+  SUPPORTS_DNS_SERVERS,
+  DEFAULT_DNS_SERVERS,
 } from '../models/constants';
 import formatProxyString from '../models/proxy';
 import { determineContentType } from '../models/utils';
@@ -140,13 +142,14 @@ export default async function BuildCommand<T>(
   // Set default values.
   const maxTime = options.maxTime ?? 10;
   const connectionTimeout = options.connectionTimeout ?? 5;
-  const compress = initialized.compress ?? true;
+  const compress = options.compress!;
   const ciphers_tls12 = options.tls?.ciphers?.TLS12 ?? CIPHERS['TLS12'];
   const ciphers_tls13 = options.tls?.ciphers?.TLS13 ?? CIPHERS['TLS13'];
   const tls_versions = options.tls?.versions ?? [1.3, 1.2];
   const httpVersion =
     options.http?.version ??
-    (SUPPORTS_HTTP3 ? 3.0 : SUPPORTS_HTTP2 ? 2.0 : 1.1);
+    (SUPPORTS_HTTP3 && !options.proxy ? 3.0 : SUPPORTS_HTTP2 ? 2.0 : 1.1);
+  const dnsServers = options.dns?.servers ?? DEFAULT_DNS_SERVERS;
 
   // Build the base curl command.
   const command: string[] = [
@@ -188,6 +191,10 @@ export default async function BuildCommand<T>(
 
   if (compress) {
     command.push(CURL.COMPRESSED);
+  }
+
+  if (SUPPORTS_DNS_SERVERS) {
+    command.push(CURL.DNS_SERVERS, dnsServers.join(','));
   }
 
   if (options.proxy) {

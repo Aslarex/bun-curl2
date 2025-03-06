@@ -27,6 +27,7 @@ const CURL = {
   KEEPALIVE_TIME: '--keepalive-time',
   KEEPALIVE_CNT: '--keepalive-cnt',
   DATA_RAW: '--data-raw',
+  DNS_SERVERS: '--dns-servers',
   USER_AGENT: '-A',
   HEADER: '-H',
   METHOD: '-X',
@@ -40,18 +41,22 @@ const CIPHERS = {
     'TLS_AES_128_GCM_SHA256:TLS_AES_256_GCM_SHA384:TLS_CHACHA20_POLY1305_SHA256',
 };
 
+const DEFAULT_DNS_SERVERS = ['8.8.8.8', '8.8.4.4'];
+
 const CURL_VERSION = (await $`curl --version`.quiet().text()).toLowerCase();
 
 const SUPPORTS_HTTP2 = CURL_VERSION.includes('http2');
 
 const SUPPORTS_HTTP3 = CURL_VERSION.includes('http3');
 
+const SUPPORTS_DNS_SERVERS = CURL_VERSION.includes('c-ares');
+
 const supportedTlsLibs = [
   'openssl',
   'libressl',
   'boringssl',
   'quictls',
-  'woflssl',
+  'wolfssl',
   'gnutls',
 ];
 
@@ -59,4 +64,12 @@ const SUPPORTS_CIPHERS_ARGS = supportedTlsLibs.some(lib =>
   CURL_VERSION.includes(lib)
 );
 
-export { CURL, CIPHERS, SUPPORTS_HTTP2, SUPPORTS_HTTP3, SUPPORTS_CIPHERS_ARGS };
+export {
+  CURL,
+  CIPHERS,
+  DEFAULT_DNS_SERVERS,
+  SUPPORTS_HTTP2,
+  SUPPORTS_HTTP3,
+  SUPPORTS_CIPHERS_ARGS,
+  SUPPORTS_DNS_SERVERS,
+};

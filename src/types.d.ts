@@ -1,5 +1,5 @@
 import type { RedisClientOptions } from 'redis';
-import CustomHeaders from '../models/headers';
+import CustomHeaders from './models/headers';
 
 /**
  * Represents a connection to a Redis server and provides basic operations.
@@ -89,6 +89,7 @@ type GlobalInit = {
 
   /**
    * Enables response compression if set to true.
+   * @default true
    */
   compress?: boolean;
 
@@ -103,11 +104,11 @@ type GlobalInit = {
   maxBodySize?: number;
 
   /**
-   * Determines whether the response body should be automatically parsed as JSON.
+   * Flag indicating if we should try parsing response to **JSON** automatically.
    *
    * @default true
    */
-  parseResponse?: boolean;
+  parseJSON?: boolean;
 };
 
 /**
@@ -205,11 +206,11 @@ interface ExtraOptions<T> {
   ) => ResponseInit<T> | Promise<ResponseInit<T>>;
 
   /**
-   * Determines whether the response body should be automatically parsed as JSON.
+   * Flag indicating if we should try parsing response to **JSON** automatically.
    *
    * @default true
    */
-  parseResponse?: boolean;
+  parseJSON?: boolean;
 
   /**
    * Configures caching for the request.
@@ -226,6 +227,30 @@ interface ExtraOptions<T> {
         keys?: (keyof RequestInit)[];
         validate?: (response: ResponseInit<T>) => boolean | Promise<boolean>;
       };
+  /**
+   * Enables response compression if set to true.
+   * @default true
+   * @override GlobalInit.compress
+   */
+  compress?: boolean;
+
+  /**
+   * DNS Configuration options
+   */
+  dns?: {
+    /**
+     * @description
+     * An array of DNS server IP addresses to use for domain resolution.
+     * Each server should be provided as a string (e.g., "8.8.8.8"). If omitted, the **Google**'s DNS servers are used.
+     */
+    servers?: string[];
+    /**
+     * *NOT IMPLEMENTED YET!*
+     * @description
+     * TTL in seconds for DNS should be cached for current hostname.
+     */
+    cache?: number;
+  };
 }
 
 type BodyInit =
@@ -358,11 +383,6 @@ interface ResponseInit<T = any> {
   cached: boolean;
 
   /**
-   * The raw response body as a string.
-   */
-  body: string;
-
-  /**
    * The total time elapsed during the request in milliseconds.
    */
   elapsedTime: number;
@@ -393,11 +413,6 @@ type BaseResponseInit = {
   status: number;
 
   /**
-   * Indicates whether the response status code signifies a successful request.
-   */
-  ok: boolean;
-
-  /**
    * The timestamp marking the start of the request.
    */
   startTime: number;
@@ -408,10 +423,9 @@ type BaseResponseInit = {
   cached: boolean;
 
   /**
-   * Flag indicating if the response should be parsed automatically.
-   * @override GlobalInit.parseResponse
+   * Flag indicating if we should try parsing response to **JSON** automatically.
    */
-  parseResponse: boolean;
+  parseJSON: boolean;
 };
 
 export type {

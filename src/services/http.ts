@@ -3,7 +3,7 @@ import type {
   RedisServer,
   RequestInit,
   ResponseInit,
-} from '../@types/Options';
+} from '../types';
 import BuildCommand from './command';
 import { BuildResponse, ProcessResponse } from './response';
 import { extractFinalUrl, md5 } from '../models/utils';
@@ -24,8 +24,11 @@ export default async function Http<T = any>(
 
   const startTime = performance.now();
 
-  options.parseResponse ??= init.parseResponse ?? true;
+  options.parseJSON ??= init.parseJSON ?? true;
+
   options.method ??= 'GET';
+
+  options.compress ??= init.compress ?? true;
 
   if (init.cache) {
     init.cache.defaultExpiration ??= 5;
@@ -54,7 +57,7 @@ export default async function Http<T = any>(
           url,
           getCachedRes,
           startTime,
-          options.parseResponse
+          options.parseJSON
         );
         const builtResponse = BuildResponse<T>(
           { ...response, cached: true },
@@ -132,12 +135,7 @@ export default async function Http<T = any>(
     stdout = extractURL.body;
   }
 
-  const response = ProcessResponse(
-    url,
-    stdout,
-    startTime,
-    options.parseResponse
-  );
+  const response = ProcessResponse(url, stdout, startTime, options.parseJSON);
   const builtResponse = BuildResponse<T>(response, options, init);
 
   // Update cache if necessary.

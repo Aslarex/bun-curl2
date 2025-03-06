@@ -14,14 +14,14 @@ test('cache', async () => {
     cache: {
       validate: () => false,
     },
-    parseResponse: false,
+    parseJSON: false,
   });
 
   const ShouldNotCacheEither = await Client.get('https://www.example.com', {
     cache: {
       validate: async () => false,
     },
-    parseResponse: false,
+    parseJSON: false,
   });
 
   const CacheRequest = await Client.get('https://www.example.com', {
@@ -29,19 +29,19 @@ test('cache', async () => {
       validate: async () => true,
       expire: 1,
     },
-    parseResponse: false,
+    parseJSON: false,
   });
 
   const ShouldReturnFromCache = await Client.get('https://www.example.com', {
     cache: true,
-    parseResponse: false,
+    parseJSON: false,
   });
 
   await Bun.sleep(1000);
 
   const ShouldBeExpired = await Client.get('https://www.example.com', {
     cache: true,
-    parseResponse: false,
+    parseJSON: false,
   });
 
   // required if we want the process to exit after finish

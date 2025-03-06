@@ -1,24 +1,18 @@
-import type {
-  GlobalInit,
-  BaseResponseInit,
-  RequestInit,
-} from '../@types/Options';
+import type { GlobalInit, BaseResponseInit, RequestInit } from '../types';
 import Headers from '../models/headers';
+import { hasJsonStructure } from '../models/utils';
 
 class ResponseWrapper<T> {
-  #parsedJson: T | null = null;
-
   constructor(
     public url: string,
-    public body: string,
+    public response: T,
     public headers: Headers,
     public status: number,
     public ok: boolean,
-    public elapsedTime: number,
-    public response: T,
     public redirected: boolean,
     public type: string,
     public cached: boolean,
+    public elapsedTime: number,
     public options: RequestInit<T>
   ) {}
 
@@ -26,30 +20,32 @@ class ResponseWrapper<T> {
    * Returns the body as a parsed JSON object.
    */
   json(): T {
-    if (this.#parsedJson) return this.#parsedJson;
-    this.#parsedJson = JSON.parse(this.body) as T;
-    return this.#parsedJson;
+    return typeof this.response === 'object'
+      ? this.response
+      : JSON.parse(this.response as string);
   }
 
   /**
    * Returns the body as a string.
    */
   text(): string {
-    return this.body;
+    return typeof this.response === 'object'
+      ? JSON.stringify(this.response)
+      : (this.response as string);
   }
 
   /**
    * Returns the body as an ArrayBuffer.
    */
   arrayBuffer(): ArrayBuffer {
-    return Buffer.from(this.body, 'binary').buffer as ArrayBuffer;
+    return Buffer.from(this.text(), 'binary').buffer as ArrayBuffer;
   }
 
   /**
    * Returns the body as a Blob.
    */
   blob(): Blob {
-    return new Blob([Buffer.from(this.body, 'binary')]);
+    return new Blob([Buffer.from(this.text(), 'binary')]);
   }
 }
 
@@ -94,31 +90,39 @@ function BuildResponse<T>(
     : (responseData.body as unknown as T);
 
   // Parse JSON if applicable
-  if (isTextResponse && responseData.parseResponse) {
+  if (isTextResponse && responseData.parseJSON) {
     try {
       res = JSON.parse(res as string);
+      if (!hasJsonStructure(res as object))
+        throw new Error('Invalid JSON Response');
     } catch {
       // If parsing fails, retain the body as-is
     }
   }
 
+  const redirected = responseData.status >= 300 && responseData.status < 400;
+  const type = responseData.status >= 400 ? 'error' : 'default';
+  const ok = responseData.status >= 200 && responseData.status < 300;
+
   // Return the wrapped response
   const response = new ResponseWrapper<T>(
     responseData.url,
-    responseData.body,
+    res,
     new Headers(responseData.headers),
     responseData.status,
-    responseData.ok,
-    performance.now() - responseData.startTime,
-    res,
-    String(responseData.status).startsWith('3'),
-    ['4', '5'].includes(String(responseData.status)[0]) ? 'error' : 'default',
+    ok,
+    redirected,
+    type,
     responseData.cached,
+    performance.now() - responseData.startTime,
     options
   );
 
   return response;
 }
+
+// Define the regex outside the function to reuse it across calls.
+const headerRegex = /^(HTTP\/\d(?:\.\d)?\s+\d{3}.*?)(?:\r?\n){2}/gms;
 
 function ProcessResponse(
   url: string,
@@ -126,17 +130,18 @@ function ProcessResponse(
   startTime: number,
   parse: boolean
 ): BaseResponseInit {
-  // Use a regex to match header blocks that start at the beginning of a line.
-  // The regex looks for a line beginning with "HTTP/<version> <status>"
-  // followed by any characters (including newlines) until a double newline (the header/body separator).
-  // The 'm' flag makes ^ match the beginning of a line,
-  // and the 's' flag makes the dot match newlines.
-  const headerRegex = /^(HTTP\/\d(?:\.\d)?\s+\d{3}.*?)(?:\r?\n){2}/gms;
+  // Reset the regex state to ensure correct matching on every call.
+  headerRegex.lastIndex = 0;
 
-  // Find all header blocks.
-  const matches = [...stdout.matchAll(headerRegex)];
+  let lastMatch: RegExpExecArray | null = null;
+  let currentMatch: RegExpExecArray | null;
 
-  if (matches.length === 0) {
+  // Iterate using regex.exec to avoid allocating an array for all matches.
+  while ((currentMatch = headerRegex.exec(stdout)) !== null) {
+    lastMatch = currentMatch;
+  }
+
+  if (!lastMatch) {
     const invalidBodyError = new Error(
       `[BunCurl2] - Received unknown response (${stdout})`
     );
@@ -146,26 +151,22 @@ function ProcessResponse(
     throw invalidBodyError;
   }
 
-  // Select the last header block (the final response headers).
-  const lastMatch = matches[matches.length - 1];
-  // match[1] holds the header block (without the trailing blank line).
+  // Retrieve the header block and compute its end index.
   const headerBlock = lastMatch[1];
-  // Calculate where the header block ends in the original text.
   const headerEndIndex = (lastMatch.index || 0) + lastMatch[0].length;
 
-  // The body is everything after the header block.
+  // Retrieve the body; trimming is kept but consider removing if whitespace is not an issue.
   const body = stdout.substring(headerEndIndex).trim();
 
   // Parse the status code from the header block.
   const statusMatch = headerBlock.match(/^HTTP\/\d(?:\.\d)?\s+(\d{3})/i);
   const status = statusMatch ? parseInt(statusMatch[1], 10) : 500;
 
-  // Now split the header block into individual lines.
-  // (Here it’s safe to split the header block only, not the whole response.)
+  // Split header block into lines and extract header key-value pairs.
   const headerLines = headerBlock.split(/\r?\n/);
-  // The first line is the status line, so skip it.
   const headers: string[][] = [];
 
+  // Start from index 1 to skip the status line.
   for (let i = 1; i < headerLines.length; i++) {
     const line = headerLines[i];
     const idx = line.indexOf(': ');
@@ -181,8 +182,7 @@ function ProcessResponse(
     body,
     headers,
     status,
-    ok: status >= 200 && status < 300,
-    parseResponse: parse,
+    parseJSON: parse,
     cached: false,
     startTime,
   };

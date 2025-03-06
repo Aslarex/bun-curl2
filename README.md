@@ -64,10 +64,7 @@ const client = new BunCurl2({
 await client.initializeCache();
 
 // Make a GET request with explicit request & response types:
-const req: ResponseInit<Record<string, string>> = await client.get(
-  'https://api.example.com/data',
-  { cache: { keys: ['headers'] } }
-);
+const req: ResponseInit<Record<string, string>> = await client.get('https://api.example.com/data', { cache: true });
 
 /*
 Response Type Details:
@@ -83,9 +80,10 @@ console.log('Response:', req.response);
 ### Direct `fetch`-like Usage
 
 ```ts
-import { Http } from 'bun-curl2';
+import { fetch } from 'bun-curl2';
 
-const req: ResponseInit<string> = await Http<string>('https://www.example.com');
+const req: ResponseInit<string> = await fetch<string>('https://www.example.com');
+
 console.log('Status:', req.status);
 console.log('Response:', req.response);
 ```
@@ -131,6 +129,6 @@ This is a solo project maintained by me. Feedback, issues, or pull requests are 
 
 ## 🏳️ License
 
-This project is licensed under the **WTFPL** – [Do What The Fuck You Want To Public License](https://en.wikipedia.org/wiki/WTFPL).
+This project is licensed under the **[WTFPL](https://en.wikipedia.org/wiki/WTFPL)**.
 
 ---
