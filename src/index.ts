@@ -110,7 +110,7 @@ export class BunCurl2 {
     url: string,
     method: RequestInit['method'],
     options: RequestInit<T> = {}
-  ) {
+  ): Promise<ResponseInit<T>> {
     return HTTPRequest<T>(
       url,
       { ...options, method },
