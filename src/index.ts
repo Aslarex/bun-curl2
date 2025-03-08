@@ -1,3 +1,6 @@
+if (!('BUN_CONFIG_DNS_TIME_TO_LIVE_SECONDS' in Bun.env)) {
+  Bun.env.BUN_CONFIG_DNS_TIME_TO_LIVE_SECONDS = '0';
+}
 import HTTPRequest from './services/http';
 import type {
   RequestInit,
@@ -8,6 +11,7 @@ import type {
   RedisServer,
   BaseRequestInit,
   BaseCache,
+  CacheKeys,
 } from './types';
 import Headers from './models/headers';
 import { LocalCache } from './services/local_cache';
@@ -22,6 +26,7 @@ export type {
   RedisServer,
   BaseRequestInit,
   BaseCache,
+  CacheKeys,
 };
 
 export {

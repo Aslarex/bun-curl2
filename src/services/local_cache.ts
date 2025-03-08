@@ -3,20 +3,30 @@ type CacheValue<T> = {
   expiresAt: number; // expiration timestamp in milliseconds
 };
 
+type Options = {
+  maxItems?: number;
+  noInterval?: boolean;
+};
+
 export class LocalCache<T = any> {
   private data: Map<string, CacheValue<T>>;
-  private cleanupInterval: ReturnType<typeof setInterval>;
+  private cleanupInterval: ReturnType<typeof setInterval> | undefined;
 
-  constructor() {
+  constructor(private options?: Options) {
     this.data = new Map();
     // Run cleanup every minute (60 * 1000 ms)
-    this.cleanupInterval = setInterval(() => this.cleanup(), 60 * 1000);
+    !options?.noInterval &&
+      (this.cleanupInterval = setInterval(() => this.cleanup(), 60 * 1000));
   }
 
   /**
    * Stores a value with the given TTL (in seconds).
    */
   set(key: string, value: T, ttl: number): void {
+    if (this.options?.maxItems && this.data.size >= this.options.maxItems) {
+      const key = [...this.data.keys()].pop();
+      key && this.data.delete(key);
+    }
     const expiresAt = Date.now() + ttl * 1000;
     this.data.set(key, { value, expiresAt });
   }

@@ -2,15 +2,28 @@ import type { GlobalInit, RequestInit } from '../types';
 import {
   CURL,
   CIPHERS,
-  SUPPORTS_HTTP3,
   SUPPORTS_HTTP2,
   SUPPORTS_CIPHERS_ARGS,
   SUPPORTS_DNS_SERVERS,
   DEFAULT_DNS_SERVERS,
+  CURL_VERSION,
 } from '../models/constants';
 import formatProxyString from '../models/proxy';
-import { determineContentType } from '../models/utils';
+import {
+  compareVersions,
+  containsAlphabet,
+  determineContentType,
+  getDefaultPort,
+  isValidIPv4,
+} from '../models/utils';
 import { Buffer } from 'buffer';
+import { LocalCache } from './local_cache';
+import { dns } from 'bun';
+
+const DNS_CACHE_MAP = new LocalCache<string>({
+  maxItems: 255,
+  noInterval: true,
+});
 
 /**
  * Helper: Build a multipart/form-data payload from a FormData instance.
@@ -126,17 +139,14 @@ async function prepareRequestBody(
  * Constructs the curl command for Bun.spawn based on options.
  */
 export default async function BuildCommand<T>(
-  url: string,
+  url: URL,
   options: RequestInit<T>,
-  initialized: GlobalInit
+  init: GlobalInit
 ) {
   if (options.transformRequest) {
-    options = options.transformRequest({ url, ...options });
-  } else if (
-    initialized.transfomRequest &&
-    options.transformRequest !== false
-  ) {
-    options = initialized.transfomRequest({ url, ...options });
+    options = options.transformRequest({ url: url.toString(), ...options });
+  } else if (init.transfomRequest && options.transformRequest !== false) {
+    options = init.transfomRequest({ url: url.toString(), ...options });
   }
 
   // Set default values.
@@ -146,9 +156,7 @@ export default async function BuildCommand<T>(
   const ciphers_tls12 = options.tls?.ciphers?.TLS12 ?? CIPHERS['TLS12'];
   const ciphers_tls13 = options.tls?.ciphers?.TLS13 ?? CIPHERS['TLS13'];
   const tls_versions = options.tls?.versions ?? [1.3, 1.2];
-  const httpVersion =
-    options.http?.version ??
-    (SUPPORTS_HTTP3 && !options.proxy ? 3.0 : SUPPORTS_HTTP2 ? 2.0 : 1.1);
+  const httpVersion = options.http?.version ?? (SUPPORTS_HTTP2 ? 2.0 : 1.1);
   const dnsServers = options.dns?.servers ?? DEFAULT_DNS_SERVERS;
 
   // Build the base curl command.
@@ -197,6 +205,43 @@ export default async function BuildCommand<T>(
     command.push(CURL.DNS_SERVERS, dnsServers.join(','));
   }
 
+  if (
+    compareVersions(CURL_VERSION, '7.21.3') >= 0 &&
+    containsAlphabet(url.host)
+  ) {
+    let i: string | null = null,
+      resolveIP =
+        (options.dns?.resolve ?? options.dns?.cache !== false)
+          ? ((i = DNS_CACHE_MAP.get(url.host)), i)
+          : null;
+    if (!resolveIP) {
+      const lookup = await dns.lookup(url.host, { family: 4 });
+      if (lookup.length) {
+        resolveIP = lookup[0].address;
+      }
+    }
+    if (resolveIP && isValidIPv4(resolveIP)) {
+      if (options.dns?.cache !== false && !i) {
+        DNS_CACHE_MAP.set(url.host, resolveIP, options.dns?.cache ?? 300);
+      }
+      const port = getDefaultPort(url.protocol);
+      command.push(CURL.DNS_RESOLVE, `${url.host}:${port}:${resolveIP}`);
+    }
+  }
+
+  if (
+    init.tcp?.fastOpen &&
+    httpVersion !== 1.1 &&
+    !options.http?.keepAlive &&
+    compareVersions(CURL_VERSION, '7.49.0') >= 0
+  ) {
+    command.push(CURL.TCP_FASTOPEN);
+  }
+
+  if (init.tcp?.noDelay && compareVersions(CURL_VERSION, '7.11.2') >= 0) {
+    command.push(CURL.TCP_NODELAY);
+  }
+
   if (options.proxy) {
     command.push(CURL.PROXY, formatProxyString(options.proxy));
   }
@@ -209,18 +254,13 @@ export default async function BuildCommand<T>(
     );
   }
 
-  if (
-    options.http?.version === 1.1 &&
-    (options.http?.keepAlive !== undefined ||
-      options.http?.keepAliveProbes !== undefined)
-  ) {
-    if (options.http.keepAlive === false || options.http.keepAlive === 0) {
+  if (httpVersion === 1.1) {
+    if (options.http?.keepAlive === false || options.http?.keepAlive === 0) {
       command.push(CURL.NO_KEEPALIVE);
-    }
-    if (typeof options.http.keepAlive === 'number') {
+    } else if (typeof options.http?.keepAlive === 'number') {
       command.push(CURL.KEEPALIVE_TIME, String(options.http.keepAlive));
     }
-    if (typeof options.http.keepAliveProbes === 'number') {
+    if (typeof options.http?.keepAliveProbes === 'number') {
       command.push(CURL.KEEPALIVE_CNT, String(options.http.keepAliveProbes));
     }
   }
@@ -251,8 +291,8 @@ export default async function BuildCommand<T>(
   }
 
   // Set default user agent if not provided.
-  if (!headers.has('user-agent') && initialized.defaultAgent) {
-    command.push(CURL.USER_AGENT, initialized.defaultAgent);
+  if (!headers.has('user-agent') && init.defaultAgent) {
+    command.push(CURL.USER_AGENT, init.defaultAgent);
   }
 
   // Append headers to the command.
@@ -263,7 +303,7 @@ export default async function BuildCommand<T>(
   command.push(CURL.METHOD, options.method!.toUpperCase());
 
   // Properly encode [ and ] in the URL.
-  command.push(url.replace(/\[/g, '%5B').replace(/\]/g, '%5D'));
+  command.push(url.toString().replace(/\[/g, '%5B').replace(/\]/g, '%5D'));
 
   return command;
 }

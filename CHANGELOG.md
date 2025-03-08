@@ -2,6 +2,14 @@
 
 > **Note:** Dates are formatted as `yyyy-mm-dd`.
 
+## [0.0.27] - 2025-03-08
+
+- Added DNS Caching support locally (max 255 entries), configurable by `RequestInit.dns` property.
+- Added TCP FastOpen & TCP NoDelay support, configurable by `GlobalInit.tcp` property.
+- Improved cache key generation logic & added `generate` function in `RequestInit.cache` property for manually generating the cache key
+- Fixed the issue where `RequestInit.follow` property was not set to `true` by default.
+- HTTP version does not default to 3.0 anymore if the cURL build supported it.
+
 ## [0.0.25] & [0.0.26] - 2025-03-06
 
 - Reduced build size by **~50%**

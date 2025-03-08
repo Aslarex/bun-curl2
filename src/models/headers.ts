@@ -37,8 +37,8 @@ const validateHeaderValue = (name: string, value: string): void => {
  */
 export type HeadersInit =
   | Headers
-  | Record<string, string>
-  | Iterable<readonly [string, string]>
+  | Record<string, string | string[]>
+  | Iterable<readonly [string, string | string[]]>
   | Iterable<Iterable<string>>;
 
 /**

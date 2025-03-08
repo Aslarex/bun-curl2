@@ -109,6 +109,26 @@ type GlobalInit = {
    * @default true
    */
   parseJSON?: boolean;
+
+  /**
+   * TCP Configuration Options
+   */
+  tcp?: {
+    /**
+     * @description
+     * sets a --tcp-fastopen flag
+     * @default true
+     * @requires cURL >= 7.49.0
+     */
+    fastOpen?: boolean;
+    /**
+     * @description
+     * sets a --tcp-nodelay flag
+     * @default true
+     * @requires cURL >= 7.11.2
+     */
+    noDelay?: boolean;
+  };
 };
 
 /**
@@ -140,32 +160,23 @@ interface Connection {
   /**
    * HTTP-specific connection settings.
    */
-  http?:
-    | {
-        /**
-         * HTTP protocol version.
-         */
-        version: 1.1;
-        /**
-         * The keep-alive setting for the connection.
-         *
-         * When set to a number, it represents the time in seconds to keep the connection alive.
-         * When set to a boolean, it indicates whether to enable (true) or disable (false) the keep-alive feature.
-         */
-        keepAlive?: number | boolean;
-        /**
-         * Number of probes to check if the connection is still alive.
-         */
-        keepAliveProbes?: number;
-      }
-    | {
-        /**
-         * HTTP protocol version.
-         *
-         * In these versions, the keepAlive and keepAliveProbes options are not available.
-         */
-        version?: 3.0 | 2.0;
-      };
+  http?: {
+    /**
+     * HTTP protocol version.
+     */
+    version: 3.0 | 2.0 | 1.1;
+    /**
+     * The keep-alive setting for the connection (HTTP/1.1).
+     *
+     * When set to a number, it represents the time in seconds to keep the connection alive.
+     * When set to a boolean, it indicates whether to enable (true) or disable (false) the keep-alive feature.
+     */
+    keepAlive?: number | boolean;
+    /**
+     * Number of probes to check if the connection is still alive.
+     */
+    keepAliveProbes?: number;
+  };
 
   /**
    * Connection timeout duration in milliseconds.
@@ -177,6 +188,8 @@ interface Connection {
    */
   maxTime?: number;
 }
+
+export type CacheKeys = 'url' | 'body' | 'headers' | 'proxy' | 'method';
 
 /**
  * Extra options to enhance request and response handling.
@@ -214,18 +227,29 @@ interface ExtraOptions<T> {
 
   /**
    * Configures caching for the request.
-   *
-   * Can be a simple boolean to enable/disable caching or an object with detailed cache options.
-   * - `expire`: The expiration time for the cache in seconds.
-   * - `keys`: An array of keys (from RequestInit) to be considered for caching.
-   * - `validate`: Function to validate if request is eligible for caching.
    */
   cache?:
     | boolean
     | {
+        /**
+         * The expiration time for the cache entry in seconds.
+         */
         expire?: number;
-        keys?: (keyof RequestInit)[];
+        /**
+         * An array of keys (from RequestInit) to be considered for caching. (default: **all**)
+         */
+        keys?: CacheKeys[];
+        /**
+         * Function to validate if request is eligible for caching.
+         */
         validate?: (response: ResponseInit<T>) => boolean | Promise<boolean>;
+        /**
+         * Function for manually generating the cache identifier (key)
+         * @override `cache.keys`
+         */
+        generate?: (
+          request: RequestInit<T> & { url: string }
+        ) => string | Promise<string>;
       };
   /**
    * Enables response compression if set to true.
@@ -242,14 +266,22 @@ interface ExtraOptions<T> {
      * @description
      * An array of DNS server IP addresses to use for domain resolution.
      * Each server should be provided as a string (e.g., "8.8.8.8"). If omitted, the **Google**'s DNS servers are used.
+     * @requires cURL build with **c-ares**
      */
     servers?: string[];
     /**
-     * *NOT IMPLEMENTED YET!*
      * @description
      * TTL in seconds for DNS should be cached for current hostname.
+     * Provide `false` if you want to disable DNS caching for following hostname.
+     * @default 300
      */
-    cache?: number;
+    cache?: number | false;
+    /**
+     * @description
+     * Directly connect to the target with following IP to bypass DNS lookup
+     * @format `ip`
+     */
+    resolve?: string;
   };
 }
 
@@ -259,22 +291,22 @@ type BodyInit =
   | Blob
   | BufferSource
   | FormData
-  | URLSearchParams;
+  | URLSearchParams
+  | ReadableStream;
 
 /**
  * Basic request initialization options.
- *
  */
 interface BaseRequestInit {
   /**
-   * The request body, which can be a string or an object.
+   * The request body
    */
   body?: BodyInit;
 
   /**
    * The request headers.
    */
-  headers?: Record<string, string | number> | Headers;
+  headers?: Record<string, string | number> | Headers | CustomHeaders;
 
   /**
    * The HTTP method to be used for the request (e.g., GET, POST).
@@ -283,6 +315,7 @@ interface BaseRequestInit {
 
   /**
    * Flag or count indicating if and how redirects should be followed.
+   * @default true
    */
   follow?: boolean | number;
 

@@ -1,4 +1,5 @@
 import * as crypto from 'crypto';
+import { PROTOCOL_PORTS } from './constants';
 
 /**
  * Helper: Determine if string or object is a valid JSON
@@ -45,4 +46,75 @@ export function extractFinalUrl(output: string): {
   const finalUrl = output.slice(markerIndex + marker.length).trim();
   const body = output.slice(0, markerIndex);
   return { finalUrl, body };
+}
+
+export function getDefaultPort(protocol: string): number | undefined {
+  return PROTOCOL_PORTS[
+    protocol.toLowerCase().replaceAll(':', '').replaceAll('/', '')
+  ];
+}
+
+export function isValidIPv4(ip: string): boolean {
+  const parts = ip.split('.');
+  if (parts.length !== 4) return false;
+
+  for (const part of parts) {
+    const len = part.length;
+    if (len === 0 || len > 3) return false;
+
+    if (len > 1 && part[0] === '0') return false;
+
+    let num = 0;
+    for (let i = 0; i < len; i++) {
+      const code = part.charCodeAt(i);
+      if (code < 48 || code > 57) return false;
+      num = num * 10 + (code - 48);
+    }
+    if (num > 255) return false;
+  }
+  return true;
+}
+
+export function containsAlphabet(str: string): boolean {
+  for (let i = 0; i < str.length; i++) {
+    const code = str.charCodeAt(i);
+    if ((code >= 65 && code <= 90) || (code >= 97 && code <= 122)) {
+      return true;
+    }
+  }
+  return false;
+}
+
+export function compareVersions(v1: string, v2: string): number {
+  let i = 0,
+    j = 0;
+  const len1 = v1.length,
+    len2 = v2.length;
+
+  while (i < len1 || j < len2) {
+    let num1 = 0,
+      num2 = 0;
+
+    // Parse next number in v1
+    while (i < len1 && v1.charAt(i) !== '.') {
+      // Assuming version strings are valid digits
+      num1 = num1 * 10 + (v1.charCodeAt(i) - 48);
+      i++;
+    }
+
+    // Parse next number in v2
+    while (j < len2 && v2.charAt(j) !== '.') {
+      num2 = num2 * 10 + (v2.charCodeAt(j) - 48);
+      j++;
+    }
+
+    if (num1 > num2) return 1;
+    if (num1 < num2) return -1;
+
+    // Skip the '.' character
+    i++;
+    j++;
+  }
+
+  return 0;
 }

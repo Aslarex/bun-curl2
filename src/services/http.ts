@@ -1,4 +1,5 @@
 import type {
+  CacheKeys,
   GlobalInit,
   RedisServer,
   RequestInit,
@@ -6,8 +7,9 @@ import type {
 } from '../types';
 import BuildCommand from './command';
 import { BuildResponse, ProcessResponse } from './response';
-import { extractFinalUrl, md5 } from '../models/utils';
+import { extractFinalUrl, hasJsonStructure, md5 } from '../models/utils';
 import { LocalCache } from './local_cache';
+import CustomHeaders from '../models/headers';
 
 export default async function Http<T = any>(
   url: string,
@@ -19,16 +21,19 @@ export default async function Http<T = any>(
     };
   } = {}
 ): Promise<ResponseInit<T>> {
-  // Validate URL
-  new URL(url);
+  const URLObject = new URL(url);
 
-  const startTime = performance.now();
+  const ts = performance.now();
 
   options.parseJSON ??= init.parseJSON ?? true;
 
   options.method ??= 'GET';
 
   options.compress ??= init.compress ?? true;
+
+  options.follow ??= true;
+
+  (init.tcp ??= {}), (init.tcp.fastOpen ??= true), (init.tcp.noDelay ??= true);
 
   if (init.cache) {
     init.cache.defaultExpiration ??= 5;
@@ -38,17 +43,37 @@ export default async function Http<T = any>(
 
   // Handle caching if enabled.
   if (options.cache && init.cache?.server) {
-    const defaultKeys: (keyof RequestInit)[] = [
-      'headers',
-      'body',
-      'proxy',
-      'method',
-    ];
-    const keys =
-      typeof options.cache === 'boolean' || !options.cache.keys
-        ? defaultKeys.map(e => options[e])
-        : options.cache.keys.map(e => options[e]);
-    key = md5(`BunCurl2|${url}|` + keys.join('|'));
+    if (typeof options.cache === 'object' && options.cache.generate) {
+      key = await options.cache.generate({ url, ...options });
+    } else {
+      const defaultKeys: CacheKeys[] = [
+        'url',
+        'headers',
+        'body',
+        'proxy',
+        'method',
+      ];
+      const mapKeys =
+        typeof options.cache === 'boolean' || !options.cache.keys
+          ? defaultKeys
+          : options.cache.keys;
+      const keys = mapKeys.map(e => {
+        let value = e === 'url' ? url : options[e];
+        if (value instanceof CustomHeaders || value instanceof Headers) {
+          let a = [] as string[];
+          for (const [k, v] of value as unknown as Iterable<[string, string]>) {
+            a.push(k + v);
+          }
+          value = a;
+          a = null!;
+        }
+        return typeof value === 'object' && hasJsonStructure(value)
+          ? JSON.stringify(value)
+          : String(value);
+      });
+
+      key = md5(`BunCurl2|` + keys.join('|'));
+    }
 
     const getCachedRes = await init.cache.server.get(key);
     if (getCachedRes) {
@@ -56,7 +81,7 @@ export default async function Http<T = any>(
         const response = ProcessResponse(
           url,
           getCachedRes,
-          startTime,
+          ts,
           options.parseJSON
         );
         const builtResponse = BuildResponse<T>(
@@ -67,14 +92,18 @@ export default async function Http<T = any>(
         return options.transformResponse
           ? options.transformResponse(builtResponse)
           : builtResponse;
-      } catch {
+      } catch (e) {
+        console.warn(
+          `[BunCurl2] - Processing response from cache has failed`,
+          e
+        );
         // If processing cached response fails, continue to execute the command.
       }
     }
   }
 
   // Build the command and spawn the process.
-  const cmd = await BuildCommand<T>(url, options, init);
+  const cmd = await BuildCommand<T>(URLObject, options, init);
   const proc = Bun.spawn(cmd, {
     stdout: 'pipe',
     stderr: 'pipe',
@@ -135,7 +164,7 @@ export default async function Http<T = any>(
     stdout = extractURL.body;
   }
 
-  const response = ProcessResponse(url, stdout, startTime, options.parseJSON);
+  const response = ProcessResponse(url, stdout, ts, options.parseJSON);
   const builtResponse = BuildResponse<T>(response, options, init);
 
   // Update cache if necessary.
