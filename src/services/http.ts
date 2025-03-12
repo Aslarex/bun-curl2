@@ -142,6 +142,8 @@ export default async function Http<T = any>(
     await proc.exited;
   }
 
+  Bun.write("./test.txt", stdout);
+
   const stderrData = await stderrPromise;
 
   // Check the exit code for errors.

@@ -129,32 +129,36 @@ function ProcessResponse(
   cached: boolean
 ): BaseResponseInit {
   const len = stdout.length;
-  let headerEndIndex = -1;
-  let delimiterLength = 0;
-
-  for (let i = 0; i < len - 3; i++) {
-    if (
-      stdout.charCodeAt(i) === 13 && // '\r'
-      stdout.charCodeAt(i + 1) === 10 && // '\n'
-      stdout.charCodeAt(i + 2) === 13 && // '\r'
-      stdout.charCodeAt(i + 3) === 10 // '\n'
-    ) {
-      headerEndIndex = i;
-      delimiterLength = 4;
+  let headerStartIndex = -1;
+  // Scan backward for a newline followed by "HTTP/" to locate the final header block.
+  for (let i = len - 6; i >= 0; i--) {
+    // Check for "\nHTTP/" (or if at the very beginning, "HTTP/" at position 0)
+    if ((i === 0 && stdout.startsWith("HTTP/")) ||
+        (stdout.charAt(i) === "\n" && stdout.substr(i + 1, 5) === "HTTP/")) {
+      headerStartIndex = (i === 0) ? 0 : i + 1;
       break;
     }
   }
-  if (headerEndIndex === -1) {
-    for (let i = 0; i < len - 1; i++) {
-      if (
-        stdout.charCodeAt(i) === 10 && // '\n'
-        stdout.charCodeAt(i + 1) === 10 // '\n'
-      ) {
-        headerEndIndex = i;
-        delimiterLength = 2;
-        break;
-      }
+  if (headerStartIndex === -1) {
+    // Fallback to lastIndexOf if backward scan failed.
+    headerStartIndex = stdout.lastIndexOf("HTTP/");
+    if (headerStartIndex === -1) {
+      const invalidBodyError = new Error(
+        `[BunCurl2] - Received unknown response (${stdout})`
+      );
+      Object.defineProperty(invalidBodyError, 'code', {
+        value: 'ERR_INVALID_RESPONSE_BODY',
+      });
+      throw invalidBodyError;
     }
+  }
+
+  // Now search for the header/body delimiter starting at headerStartIndex.
+  let headerEndIndex = stdout.indexOf("\r\n\r\n", headerStartIndex);
+  let delimiterLength = 4;
+  if (headerEndIndex === -1) {
+    headerEndIndex = stdout.indexOf("\n\n", headerStartIndex);
+    delimiterLength = 2;
   }
   if (headerEndIndex === -1) {
     const invalidBodyError = new Error(
@@ -166,19 +170,19 @@ function ProcessResponse(
     throw invalidBodyError;
   }
 
-  // Extract header block and body.
-  const headerBlock = stdout.substring(0, headerEndIndex);
+  // Extract the header block and body.
+  const headerBlock = stdout.substring(headerStartIndex, headerEndIndex);
   const body = stdout.substring(headerEndIndex + delimiterLength).trim();
 
   // Process the status line.
-  let firstLineEnd = headerBlock.indexOf('\r\n');
-  if (firstLineEnd === -1) firstLineEnd = headerBlock.indexOf('\n');
+  let firstLineEnd = headerBlock.indexOf("\r\n");
+  if (firstLineEnd === -1) firstLineEnd = headerBlock.indexOf("\n");
   if (firstLineEnd === -1) firstLineEnd = headerBlock.length;
   const statusLine = headerBlock.substring(0, firstLineEnd);
   let status = 500;
-  const firstSpace = statusLine.indexOf(' ');
+  const firstSpace = statusLine.indexOf(" ");
   if (firstSpace !== -1) {
-    const secondSpace = statusLine.indexOf(' ', firstSpace + 1);
+    const secondSpace = statusLine.indexOf(" ", firstSpace + 1);
     const codeStr =
       secondSpace !== -1
         ? statusLine.substring(firstSpace + 1, secondSpace)
@@ -189,24 +193,19 @@ function ProcessResponse(
   // Manually scan for header lines after the status line.
   const headers: string[][] = [];
   let pos = firstLineEnd;
-  // Determine the newline length used (CRLF or LF) by checking the first line break.
-  let newlineLen = 1;
-  if (headerBlock.charAt(pos) === '\r') {
-    newlineLen = 2;
-  }
-  pos += newlineLen; // skip the status line.
+  // Determine the newline length (CRLF or LF) based on the first line break.
+  let newlineLen = headerBlock.charAt(pos) === "\r" ? 2 : 1;
+  pos += newlineLen; // Skip the status line.
 
   while (pos < headerBlock.length) {
-    // Find the next newline.
     let nextPos = pos;
     while (nextPos < headerBlock.length) {
       const ch = headerBlock.charAt(nextPos);
-      if (ch === '\r' || ch === '\n') break;
+      if (ch === "\r" || ch === "\n") break;
       nextPos++;
     }
     const line = headerBlock.substring(pos, nextPos);
-    // Look for ': ' in the line.
-    const colonIndex = line.indexOf(': ');
+    const colonIndex = line.indexOf(": ");
     if (colonIndex !== -1) {
       headers.push([
         line.substring(0, colonIndex),
@@ -216,8 +215,8 @@ function ProcessResponse(
     // Advance pos: handle both CRLF and LF.
     if (nextPos < headerBlock.length) {
       if (
-        headerBlock.charAt(nextPos) === '\r' &&
-        headerBlock.charAt(nextPos + 1) === '\n'
+        headerBlock.charAt(nextPos) === "\r" &&
+        headerBlock.charAt(nextPos + 1) === "\n"
       ) {
         pos = nextPos + 2;
       } else {
@@ -238,5 +237,6 @@ function ProcessResponse(
     cached,
   };
 }
+
 
 export { ProcessResponse, BuildResponse, ResponseWrapper };
