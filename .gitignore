@@ -132,3 +132,4 @@ dist
 # Others
 bun.lock
 .vscode
+test.ts
