@@ -2,11 +2,9 @@ import type { GlobalInit, RequestInit } from '../types';
 import {
   CURL,
   CIPHERS,
-  SUPPORTS_HTTP2,
-  SUPPORTS_CIPHERS_ARGS,
-  SUPPORTS_DNS_SERVERS,
   DEFAULT_DNS_SERVERS,
   CURL_VERSION,
+  CURL_OUTPUT,
 } from '../models/constants';
 import formatProxyString from '../models/proxy';
 import {
@@ -14,11 +12,31 @@ import {
   containsAlphabet,
   determineContentType,
   getDefaultPort,
+  hasJsonStructure,
   isValidIPv4,
 } from '../models/utils';
 import { Buffer } from 'buffer';
 import { LocalCache } from './local_cache';
 import { dns } from 'bun';
+
+const SUPPORTS = {
+  HTTP2: CURL_OUTPUT.indexOf('http2') !== -1,
+  DNS_SERVERS: CURL_OUTPUT.indexOf('c-ares') !== -1,
+  DNS_RESOLVE: compareVersions(CURL_VERSION, '7.21.3') >= 0,
+  TCP_FASTOPEN: compareVersions(CURL_VERSION, '7.49.0') >= 0,
+  TCP_NODELAY: compareVersions(CURL_VERSION, '7.11.2') >= 0,
+  CIPHERS: (() => {
+    const libs = [
+      'openssl',
+      'libressl',
+      'boringssl',
+      'quictls',
+      'wolfssl',
+      'gnutls',
+    ];
+    return libs.some(lib => CURL_OUTPUT.indexOf(lib) !== -1);
+  })(),
+};
 
 const DNS_CACHE_MAP = new LocalCache<string>({
   maxItems: 255,
@@ -122,7 +140,7 @@ async function prepareRequestBody(
   }
 
   // Plain object: assume JSON.
-  if (typeof body === 'object') {
+  if (typeof body === 'object' && hasJsonStructure(body)) {
     return {
       body: JSON.stringify(body),
       type: 'application/json',
@@ -155,8 +173,9 @@ export default async function BuildCommand<T>(
   const compress = options.compress!;
   const ciphers_tls12 = options.tls?.ciphers?.TLS12 ?? CIPHERS['TLS12'];
   const ciphers_tls13 = options.tls?.ciphers?.TLS13 ?? CIPHERS['TLS13'];
+  const tls_insecure = options.tls?.insecure ?? false;
   const tls_versions = options.tls?.versions ?? [1.3, 1.2];
-  const httpVersion = options.http?.version ?? (SUPPORTS_HTTP2 ? 2.0 : 1.1);
+  const httpVersion = options.http?.version ?? (SUPPORTS.HTTP2 ? 2.0 : 1.1);
   const dnsServers = options.dns?.servers ?? DEFAULT_DNS_SERVERS;
 
   // Build the base curl command.
@@ -174,9 +193,13 @@ export default async function BuildCommand<T>(
     CURL.HTTP_VERSION[httpVersion],
   ];
 
+  if (tls_insecure) {
+    command.push(CURL.INSECURE);
+  }
+
   if (tls_versions.includes(1.2)) {
     command.push(CURL.TLSv1_2);
-    if (SUPPORTS_CIPHERS_ARGS) {
+    if (SUPPORTS.CIPHERS) {
       command.push(
         CURL.CIPHERS,
         Array.isArray(ciphers_tls12) ? ciphers_tls12.join(':') : ciphers_tls12
@@ -189,7 +212,7 @@ export default async function BuildCommand<T>(
       ? [CURL.TLS_MAX, '1.3']
       : [CURL.TLSv1_3];
     command.push(...delta);
-    if (SUPPORTS_CIPHERS_ARGS) {
+    if (SUPPORTS.CIPHERS) {
       command.push(
         CURL.TLS13_CIPHERS,
         Array.isArray(ciphers_tls13) ? ciphers_tls13.join(':') : ciphers_tls13
@@ -201,14 +224,11 @@ export default async function BuildCommand<T>(
     command.push(CURL.COMPRESSED);
   }
 
-  if (SUPPORTS_DNS_SERVERS) {
+  if (SUPPORTS.DNS_SERVERS) {
     command.push(CURL.DNS_SERVERS, dnsServers.join(','));
   }
 
-  if (
-    compareVersions(CURL_VERSION, '7.21.3') >= 0 &&
-    containsAlphabet(url.host)
-  ) {
+  if (SUPPORTS.DNS_RESOLVE && containsAlphabet(url.host)) {
     let i: string | null = null,
       resolveIP =
         (options.dns?.resolve ?? options.dns?.cache !== false)
@@ -233,12 +253,12 @@ export default async function BuildCommand<T>(
     init.tcp?.fastOpen &&
     httpVersion !== 1.1 &&
     !options.http?.keepAlive &&
-    compareVersions(CURL_VERSION, '7.49.0') >= 0
+    SUPPORTS.TCP_FASTOPEN
   ) {
     command.push(CURL.TCP_FASTOPEN);
   }
 
-  if (init.tcp?.noDelay && compareVersions(CURL_VERSION, '7.11.2') >= 0) {
+  if (init.tcp?.noDelay && SUPPORTS.TCP_NODELAY) {
     command.push(CURL.TCP_NODELAY);
   }
 
@@ -303,7 +323,7 @@ export default async function BuildCommand<T>(
   command.push(CURL.METHOD, options.method!.toUpperCase());
 
   // Properly encode [ and ] in the URL.
-  command.push(url.toString().replace(/\[/g, '%5B').replace(/\]/g, '%5D'));
+  command.push(url.toString().replaceAll('[', '%5B').replaceAll(']', '%5D'));
 
   return command;
 }

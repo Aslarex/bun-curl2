@@ -155,6 +155,12 @@ interface Connection {
      * Supported TLS versions.
      */
     versions?: (1.3 | 1.2)[];
+
+    /**
+     * Disable certificate checks for HTTPS targets
+     * @default false
+     */
+    insecure?: boolean;
   };
 
   /**
@@ -448,7 +454,7 @@ type BaseResponseInit = {
   /**
    * The timestamp marking the start of the request.
    */
-  startTime: number;
+  requestStartTime: number;
 
   /**
    * Indicates whether the response was served from a cache.

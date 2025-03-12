@@ -82,13 +82,10 @@ export default async function Http<T = any>(
           url,
           getCachedRes,
           ts,
-          options.parseJSON
+          options.parseJSON,
+          true
         );
-        const builtResponse = BuildResponse<T>(
-          { ...response, cached: true },
-          options,
-          init
-        );
+        const builtResponse = BuildResponse<T>(response, options, init);
         return options.transformResponse
           ? options.transformResponse(builtResponse)
           : builtResponse;
@@ -164,7 +161,7 @@ export default async function Http<T = any>(
     stdout = extractURL.body;
   }
 
-  const response = ProcessResponse(url, stdout, ts, options.parseJSON);
+  const response = ProcessResponse(url, stdout, ts, options.parseJSON, false);
   const builtResponse = BuildResponse<T>(response, options, init);
 
   // Update cache if necessary.

@@ -1,5 +1,5 @@
-if (!('BUN_CONFIG_DNS_TIME_TO_LIVE_SECONDS' in Bun.env)) {
-  Bun.env.BUN_CONFIG_DNS_TIME_TO_LIVE_SECONDS = '0';
+if (!('BUN_CONFIG_DNS_TIME_TO_LIVE_SECONDS' in process.env)) {
+  process.env.BUN_CONFIG_DNS_TIME_TO_LIVE_SECONDS = '0';
 }
 import HTTPRequest from './services/http';
 import type {
@@ -38,14 +38,41 @@ export {
   ResponseWrapper,
 };
 
+/**
+ * BunCurl2 provides a high-level HTTP client with caching support.
+ *
+ * @example
+ * const bunCurl = new BunCurl2({ cache: { mode: 'redis', options: { host: 'localhost' } } });
+ * await bunCurl.initializeCache();
+ * const response = await bunCurl.get('https://example.com');
+ */
 export class BunCurl2 {
+  /**
+   * The cache instance that can be either a Redis server or a local cache.
+   *
+   * @private
+   */
   private cache?: {
     server: RedisServer | LocalCache<string>;
     defaultExpiration?: number;
   };
 
+  /**
+   * Creates an instance of BunCurl2.
+   *
+   * @param args - Global initialization options merged with cache settings.
+   */
   constructor(private args: GlobalInit & { cache?: CacheType } = {}) {}
 
+  /**
+   * Initializes the cache based on the provided configuration.
+   *
+   * If no cache configuration is provided, returns false.
+   * Supports 'local' and 'redis' modes.
+   *
+   * @returns {Promise<boolean>} A promise that resolves to true if the cache was successfully initialized; false otherwise.
+   * @throws {Error} Throws an error with code 'ERR_CACHE_INITIALIZATION' if cache initialization fails.
+   */
   async initializeCache(): Promise<boolean> {
     if (!this.args.cache) return false;
     this.args.cache.mode = this.args.cache.mode ?? 'redis';
@@ -98,6 +125,14 @@ export class BunCurl2 {
     }
   }
 
+  /**
+   * Disconnects the cache server.
+   *
+   * If the cache is a local cache, it calls its `end` method.
+   * If it's a Redis server, it calls its `disconnect` method.
+   *
+   * @returns {Promise<void>} A promise that resolves when the cache is disconnected.
+   */
   async disconnectCache(): Promise<void> {
     const server = this.cache?.server;
     if (!server) return void 0;
@@ -106,6 +141,16 @@ export class BunCurl2 {
       : server?.disconnect();
   }
 
+  /**
+   * Internal method to perform an HTTP request.
+   *
+   * @private
+   * @template T - The expected type of the response body.
+   * @param url - The URL to request.
+   * @param method - The HTTP method to use.
+   * @param options - Additional request options.
+   * @returns {Promise<ResponseInit<T>>} A promise that resolves to the response.
+   */
   private async request<T = any>(
     url: string,
     method: RequestInit['method'],
@@ -118,37 +163,108 @@ export class BunCurl2 {
     );
   }
 
-  async fetch<T = any>(url: string, options?: RequestInit<T>) {
+  /**
+   * Performs an HTTP fetch request.
+   *
+   * @template T - The expected type of the response body.
+   * @param url - The URL to fetch.
+   * @param options - Optional request options.
+   * @returns {Promise<ResponseInit<T>>} A promise that resolves to the response.
+   */
+  async fetch<T = any>(
+    url: string,
+    options?: RequestInit<T>
+  ): Promise<ResponseInit<T>> {
     return this.request<T>(url, options?.method || 'GET', options);
   }
 
+  /**
+   * Performs an HTTP GET request.
+   *
+   * @template T - The expected type of the response body.
+   * @param url - The URL to request.
+   * @param options - Request options excluding method and body.
+   * @returns {Promise<ResponseInit<T>>} A promise that resolves to the response.
+   */
   async get<T = any>(
     url: string,
     options?: Omit<RequestInit<T>, 'method' | 'body'>
-  ) {
+  ): Promise<ResponseInit<T>> {
     return this.request<T>(url, 'GET', options);
   }
 
-  async post<T = any>(url: string, options?: Omit<RequestInit<T>, 'method'>) {
+  /**
+   * Performs an HTTP POST request.
+   *
+   * @template T - The expected type of the response body.
+   * @param url - The URL to request.
+   * @param options - Request options excluding method.
+   * @returns {Promise<ResponseInit<T>>} A promise that resolves to the response.
+   */
+  async post<T = any>(
+    url: string,
+    options?: Omit<RequestInit<T>, 'method'>
+  ): Promise<ResponseInit<T>> {
     return this.request<T>(url, 'POST', options);
   }
 
-  async delete<T = any>(url: string, options?: Omit<RequestInit<T>, 'method'>) {
+  /**
+   * Performs an HTTP DELETE request.
+   *
+   * @template T - The expected type of the response body.
+   * @param url - The URL to request.
+   * @param options - Request options excluding method.
+   * @returns {Promise<ResponseInit<T>>} A promise that resolves to the response.
+   */
+  async delete<T = any>(
+    url: string,
+    options?: Omit<RequestInit<T>, 'method'>
+  ): Promise<ResponseInit<T>> {
     return this.request<T>(url, 'DELETE', options);
   }
 
-  async put<T = any>(url: string, options?: Omit<RequestInit<T>, 'method'>) {
+  /**
+   * Performs an HTTP PUT request.
+   *
+   * @template T - The expected type of the response body.
+   * @param url - The URL to request.
+   * @param options - Request options excluding method.
+   * @returns {Promise<ResponseInit<T>>} A promise that resolves to the response.
+   */
+  async put<T = any>(
+    url: string,
+    options?: Omit<RequestInit<T>, 'method'>
+  ): Promise<ResponseInit<T>> {
     return this.request<T>(url, 'PUT', options);
   }
 
-  async patch<T = any>(url: string, options?: Omit<RequestInit<T>, 'method'>) {
+  /**
+   * Performs an HTTP PATCH request.
+   *
+   * @template T - The expected type of the response body.
+   * @param url - The URL to request.
+   * @param options - Request options excluding method.
+   * @returns {Promise<ResponseInit<T>>} A promise that resolves to the response.
+   */
+  async patch<T = any>(
+    url: string,
+    options?: Omit<RequestInit<T>, 'method'>
+  ): Promise<ResponseInit<T>> {
     return this.request<T>(url, 'PATCH', options);
   }
 
+  /**
+   * Performs an HTTP HEAD request.
+   *
+   * @template T - The expected type of the response body.
+   * @param url - The URL to request.
+   * @param options - Request options excluding method and body.
+   * @returns {Promise<ResponseInit<T>>} A promise that resolves to the response.
+   */
   async head<T = any>(
     url: string,
     options?: Omit<RequestInit<T>, 'method' | 'body'>
-  ) {
+  ): Promise<ResponseInit<T>> {
     return this.request<T>(url, 'HEAD', options);
   }
 }

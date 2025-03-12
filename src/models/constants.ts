@@ -14,6 +14,7 @@ const CURL = {
     2.0: '--http2',
     1.1: '--http1.1',
   },
+  INSECURE: '--insecure',
   TLSv1_2: '--tlsv1.2',
   CIPHERS: '--ciphers',
   TLS_MAX: '--tls-max',
@@ -76,33 +77,11 @@ const curlVersionMatch = CURL_OUTPUT.match(/curl\s+(\d+.\d+.\d+)/);
 
 const CURL_VERSION = curlVersionMatch ? curlVersionMatch[1] : '0.0.0';
 
-const SUPPORTS_HTTP2 = CURL_OUTPUT.includes('http2');
-
-const SUPPORTS_HTTP3 = CURL_OUTPUT.includes('http3');
-
-const SUPPORTS_DNS_SERVERS = CURL_OUTPUT.includes('c-ares');
-
-const supportedTlsLibs = [
-  'openssl',
-  'libressl',
-  'boringssl',
-  'quictls',
-  'wolfssl',
-  'gnutls',
-];
-
-const SUPPORTS_CIPHERS_ARGS = supportedTlsLibs.some(lib =>
-  CURL_OUTPUT.includes(lib)
-);
-
 export {
   CURL,
   CIPHERS,
   PROTOCOL_PORTS,
   DEFAULT_DNS_SERVERS,
   CURL_VERSION,
-  SUPPORTS_HTTP2,
-  SUPPORTS_HTTP3,
-  SUPPORTS_CIPHERS_ARGS,
-  SUPPORTS_DNS_SERVERS,
+  CURL_OUTPUT,
 };

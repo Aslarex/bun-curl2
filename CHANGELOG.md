@@ -2,6 +2,12 @@
 
 > **Note:** Dates are formatted as `yyyy-mm-dd`.
 
+## [0.0.29] - 2025-03-12
+
+- Optimizations over response manipulation & command builder ⚡
+- Introduce `RequestInit.tls.insecure` property ⭐
+- JSDoc comments for **BunCurl2** instance 💭
+
 ## [0.0.27] & [0.0.28] - 2025-03-08
 
 - Fixed typescript issues (sorry for this)

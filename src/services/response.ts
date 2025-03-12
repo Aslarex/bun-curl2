@@ -114,34 +114,49 @@ function BuildResponse<T>(
     redirected,
     type,
     responseData.cached,
-    performance.now() - responseData.startTime,
+    performance.now() - responseData.requestStartTime,
     options
   );
 
   return response;
 }
 
-// Define the regex outside the function to reuse it across calls.
-const headerRegex = /^(HTTP\/\d(?:\.\d)?\s+\d{3}.*?)(?:\r?\n){2}/gms;
-
 function ProcessResponse(
   url: string,
   stdout: string,
-  startTime: number,
-  parse: boolean
+  requestStartTime: number,
+  parseJSON: boolean,
+  cached: boolean
 ): BaseResponseInit {
-  // Reset the regex state to ensure correct matching on every call.
-  headerRegex.lastIndex = 0;
+  const len = stdout.length;
+  let headerEndIndex = -1;
+  let delimiterLength = 0;
 
-  let lastMatch: RegExpExecArray | null = null;
-  let currentMatch: RegExpExecArray | null;
-
-  // Iterate using regex.exec to avoid allocating an array for all matches.
-  while ((currentMatch = headerRegex.exec(stdout)) !== null) {
-    lastMatch = currentMatch;
+  for (let i = 0; i < len - 3; i++) {
+    if (
+      stdout.charCodeAt(i) === 13 && // '\r'
+      stdout.charCodeAt(i + 1) === 10 && // '\n'
+      stdout.charCodeAt(i + 2) === 13 && // '\r'
+      stdout.charCodeAt(i + 3) === 10 // '\n'
+    ) {
+      headerEndIndex = i;
+      delimiterLength = 4;
+      break;
+    }
   }
-
-  if (!lastMatch) {
+  if (headerEndIndex === -1) {
+    for (let i = 0; i < len - 1; i++) {
+      if (
+        stdout.charCodeAt(i) === 10 && // '\n'
+        stdout.charCodeAt(i + 1) === 10 // '\n'
+      ) {
+        headerEndIndex = i;
+        delimiterLength = 2;
+        break;
+      }
+    }
+  }
+  if (headerEndIndex === -1) {
     const invalidBodyError = new Error(
       `[BunCurl2] - Received unknown response (${stdout})`
     );
@@ -151,29 +166,65 @@ function ProcessResponse(
     throw invalidBodyError;
   }
 
-  // Retrieve the header block and compute its end index.
-  const headerBlock = lastMatch[1];
-  const headerEndIndex = (lastMatch.index || 0) + lastMatch[0].length;
+  // Extract header block and body.
+  const headerBlock = stdout.substring(0, headerEndIndex);
+  const body = stdout.substring(headerEndIndex + delimiterLength).trim();
 
-  // Retrieve the body; trimming is kept but consider removing if whitespace is not an issue.
-  const body = stdout.substring(headerEndIndex).trim();
+  // Process the status line.
+  let firstLineEnd = headerBlock.indexOf('\r\n');
+  if (firstLineEnd === -1) firstLineEnd = headerBlock.indexOf('\n');
+  if (firstLineEnd === -1) firstLineEnd = headerBlock.length;
+  const statusLine = headerBlock.substring(0, firstLineEnd);
+  let status = 500;
+  const firstSpace = statusLine.indexOf(' ');
+  if (firstSpace !== -1) {
+    const secondSpace = statusLine.indexOf(' ', firstSpace + 1);
+    const codeStr =
+      secondSpace !== -1
+        ? statusLine.substring(firstSpace + 1, secondSpace)
+        : statusLine.substring(firstSpace + 1);
+    status = parseInt(codeStr, 10) || 500;
+  }
 
-  // Parse the status code from the header block.
-  const statusMatch = headerBlock.match(/^HTTP\/\d(?:\.\d)?\s+(\d{3})/i);
-  const status = statusMatch ? parseInt(statusMatch[1], 10) : 500;
-
-  // Split header block into lines and extract header key-value pairs.
-  const headerLines = headerBlock.split(/\r?\n/);
+  // Manually scan for header lines after the status line.
   const headers: string[][] = [];
+  let pos = firstLineEnd;
+  // Determine the newline length used (CRLF or LF) by checking the first line break.
+  let newlineLen = 1;
+  if (headerBlock.charAt(pos) === '\r') {
+    newlineLen = 2;
+  }
+  pos += newlineLen; // skip the status line.
 
-  // Start from index 1 to skip the status line.
-  for (let i = 1; i < headerLines.length; i++) {
-    const line = headerLines[i];
-    const idx = line.indexOf(': ');
-    if (idx !== -1) {
-      const name = line.substring(0, idx);
-      const value = line.substring(idx + 2);
-      headers.push([name, value]);
+  while (pos < headerBlock.length) {
+    // Find the next newline.
+    let nextPos = pos;
+    while (nextPos < headerBlock.length) {
+      const ch = headerBlock.charAt(nextPos);
+      if (ch === '\r' || ch === '\n') break;
+      nextPos++;
+    }
+    const line = headerBlock.substring(pos, nextPos);
+    // Look for ': ' in the line.
+    const colonIndex = line.indexOf(': ');
+    if (colonIndex !== -1) {
+      headers.push([
+        line.substring(0, colonIndex),
+        line.substring(colonIndex + 2),
+      ]);
+    }
+    // Advance pos: handle both CRLF and LF.
+    if (nextPos < headerBlock.length) {
+      if (
+        headerBlock.charAt(nextPos) === '\r' &&
+        headerBlock.charAt(nextPos + 1) === '\n'
+      ) {
+        pos = nextPos + 2;
+      } else {
+        pos = nextPos + 1;
+      }
+    } else {
+      break;
     }
   }
 
@@ -182,9 +233,9 @@ function ProcessResponse(
     body,
     headers,
     status,
-    parseJSON: parse,
-    cached: false,
-    startTime,
+    requestStartTime,
+    parseJSON,
+    cached,
   };
 }
 

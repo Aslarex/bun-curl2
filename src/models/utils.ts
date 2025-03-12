@@ -2,31 +2,61 @@ import * as crypto from 'crypto';
 import { PROTOCOL_PORTS } from './constants';
 
 /**
- * Helper: Determine if string or object is a valid JSON
+ * Helper: Determine if a string or object is a valid JSON structure (object or array).
+ *
+ * @param i - The string or object to test.
+ * @returns {boolean} True if the input represents a JSON object or array, false otherwise.
  */
 export function hasJsonStructure(i: string | object): boolean {
-  try {
-    const result = typeof i === 'string' ? JSON.parse(i) : i;
-    const type = Object.prototype.toString.call(result);
-    return type === '[object Object]' || type === '[object Array]';
-  } catch {
-    return false;
+  let res: any;
+  if (typeof i === 'string') {
+    const str = i.trim();
+    const firstChar = str[0];
+    const lastChar = str[str.length - 1];
+    // If the string doesn't start and end with matching JSON brackets, return false.
+    if (
+      (firstChar !== '{' || lastChar !== '}') &&
+      (firstChar !== '[' || lastChar !== ']')
+    ) {
+      return false;
+    }
+    try {
+      res = JSON.parse(str);
+    } catch {
+      return false;
+    }
+  } else {
+    res = i;
   }
+  // Check that the parsed value is either an object or an array.
+  return (
+    res !== null &&
+    typeof res === 'object' &&
+    (Array.isArray(res) || res.constructor === Object)
+  );
 }
 
 /**
  * Helper: Determine Content-Type based on body content.
+ *
+ * @param body - The body string.
+ * @returns {string} The determined Content-Type.
  */
 export function determineContentType(body: string): string {
   if (hasJsonStructure(body)) {
     return 'application/json;charset=UTF-8';
   }
-  // Regex to check for URL-encoded form data.
-  const urlEncodedRegex = /^([^=&]+=[^=&]*)(?:&[^=&]+=[^=&]*)*$/;
-  if (urlEncodedRegex.test(body)) {
-    return 'application/x-www-form-urlencoded;charset=UTF-8';
+
+  // Fast pre-check: if no '=' exists, it's unlikely to be URL-encoded.
+  if (body.indexOf('=') === -1) return 'text/plain;charset=UTF-8';
+
+  // Manually check that each ampersand-separated part contains an '='.
+  const pairs = body.split('&');
+  for (let i = 0, len = pairs.length; i < len; i++) {
+    // If any pair does not include '=', it's not properly URL-encoded.
+    if (pairs[i].indexOf('=') === -1) return 'text/plain;charset=UTF-8';
   }
-  return 'text/plain;charset=UTF-8';
+  return 'application/x-www-form-urlencoded;charset=UTF-8';
 }
 
 export function md5(str: string) {
