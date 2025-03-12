@@ -2,7 +2,7 @@
 
 > **Note:** Dates are formatted as `yyyy-mm-dd`.
 
-## [0.0.29] & [0.0.30] - 2025-03-12
+## [0.0.31] - 2025-03-12
 
 - Optimizations over response manipulation & command builder ⚡
 - Introduce `RequestInit.tls.insecure` property ⭐
