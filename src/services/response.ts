@@ -137,7 +137,7 @@ function ProcessResponse(
     // Check for "\nHTTP/" (or if at the very beginning, "HTTP/" at position 0)
     if (
       (i === 0 && stdout.startsWith('HTTP/')) ||
-      (stdout.charAt(i) === '\n' && stdout.substring(i + 1, 5) === 'HTTP/')
+      (stdout.charAt(i) === '\n' && stdout.substring(i + 1, i + 6) === 'HTTP/')
     ) {
       headerStartIndex = i === 0 ? 0 : i + 1;
       break;
