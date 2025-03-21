@@ -38,6 +38,7 @@ const CURL = {
   USER_AGENT: '-A',
   HEADER: '-H',
   METHOD: '-X',
+  HEAD: '-I',
 };
 
 const TLS = {

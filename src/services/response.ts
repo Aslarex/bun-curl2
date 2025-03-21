@@ -92,9 +92,11 @@ function BuildResponse<T>(
   // Parse JSON if applicable
   if (isTextResponse && responseData.parseJSON) {
     try {
-      res = JSON.parse(res as string);
-      if (!hasJsonStructure(res as object))
-        throw new Error('Invalid JSON Response');
+      let i = JSON.parse(res as string);
+      if (hasJsonStructure(i)) {
+        res = i;
+      }
+      i = null!;
     } catch {
       // If parsing fails, retain the body as-is
     }

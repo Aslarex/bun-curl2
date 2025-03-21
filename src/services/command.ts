@@ -159,6 +159,7 @@ export default async function BuildCommand<T>(
   const tls_versions = options.tls?.versions ?? [TLS.Version12, TLS.Version13];
   const httpVersion = options.http?.version ?? (SUPPORTS.HTTP2 ? 2.0 : 1.1);
   const dnsServers = options.dns?.servers ?? DEFAULT_DNS_SERVERS;
+  const method = options.method!.toUpperCase();
 
   // ── Build Base Command ──
   const command: string[] = [
@@ -210,7 +211,7 @@ export default async function BuildCommand<T>(
   }
 
   // ── Append Compression, DNS Servers & DNS Resolve ──
-  if (compress) command.push(CURL.COMPRESSED);
+  if (compress && method !== 'HEAD') command.push(CURL.COMPRESSED);
   if (SUPPORTS.DNS_SERVERS)
     command.push(CURL.DNS_SERVERS, dnsServers.join(','));
 
@@ -304,7 +305,9 @@ export default async function BuildCommand<T>(
   }
 
   // ── Append HTTP Method & Final URL ──
-  command.push(CURL.METHOD, options.method!.toUpperCase());
+  method === 'HEAD'
+    ? command.push(CURL.HEAD)
+    : command.push(CURL.METHOD, method);
   command.push(
     urlString.replace(/[\[\]]/g, char => (char === '[' ? '%5B' : '%5D')),
   );
