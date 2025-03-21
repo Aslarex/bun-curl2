@@ -17,7 +17,7 @@ test('error', async () => {
   expect(
     fetch('https://www.example.com', {
       proxy: 'test:123',
-    })
+    }),
   ).rejects.toMatchObject({
     exitCode: 5,
     code: 'ERR_CURL_FAILED',

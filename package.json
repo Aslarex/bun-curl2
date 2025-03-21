@@ -1,6 +1,6 @@
 {
   "name": "bun-curl2",
-  "version": "0.0.31",
+  "version": "0.0.32",
   "author": {
     "name": "Nicholas",
     "url": "https://github.com/Aslarex",
@@ -21,7 +21,7 @@
   "license": "WTFPL",
   "scripts": {
     "dev": "DEBUG=* bun test --watch",
-    "build": "rm -rf dist && tsc --project tsconfig.json && esbuild --minify $(find ./dist -type f -name '*.js') --outdir=dist --tree-shaking=true --allow-overwrite --format=esm && rm -rf dist/types.js",
+    "build": "rm -rf dist && tsc --project tsconfig.json && esbuild --minify $(find ./dist -type f -name '*.js') --outdir=dist --tree-shaking=true --allow-overwrite --format=esm && find ./dist -type f -empty -delete",
     "prettier": "prettier src/ tests/ examples/ --write"
   },
   "exports": {
@@ -32,7 +32,9 @@
   },
   "type": "module",
   "module": "./dist/index.js",
-  "files": ["dist"],
+  "files": [
+    "dist"
+  ],
   "types": "./dist/index.d.ts",
   "optionalDependencies": {
     "redis": "^4.0.0",

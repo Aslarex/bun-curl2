@@ -63,6 +63,7 @@
 - Added backwards compatibility in `package.json`
 
 ## [0.0.16] - 2025-02-25
+
 - Added AbortController signal support. [[EXAMPLE]](./examples/abort.ts)
 - Fixed Redis logic and TTL issues.
 - Fixed response type propagation in `BunCurl2` methods.

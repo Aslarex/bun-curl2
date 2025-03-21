@@ -45,7 +45,7 @@ function isValidHost(host: string): boolean {
  */
 export default function formatProxyString(
   input: string,
-  protocolOverride?: string
+  protocolOverride?: string,
 ): string {
   // Default protocol if none is found and no override is provided.
   let protocol = protocolOverride || 'http';
@@ -63,7 +63,7 @@ export default function formatProxyString(
     const [username, password] = credentials.split(':');
     if (!username || !password) {
       throw new Error(
-        `[BunCurl2] - Invalid credentials format. Expected "username:password", received: ${input}`
+        `[BunCurl2] - Invalid credentials format. Expected "username:password", received: ${input}`,
       );
     }
     const [host, port] = hostPort.split(':');
@@ -101,13 +101,13 @@ export default function formatProxyString(
     }
     if (!username || !password) {
       throw new Error(
-        `[BunCurl2] - Invalid credentials format. Expected "username:password", received: ${input}`
+        `[BunCurl2] - Invalid credentials format. Expected "username:password", received: ${input}`,
       );
     }
     return `${protocol}://${username}:${password}@${host}:${port}`;
   } else {
     throw new Error(
-      `[BunCurl2] - Invalid input format: ${input}. Expected either "ip:port", "ip:port:username:password", or "username:password@ip:port", with an optional protocol prefix.`
+      `[BunCurl2] - Invalid input format: ${input}. Expected either "ip:port", "ip:port:username:password", or "username:password@ip:port", with an optional protocol prefix.`,
     );
   }
 }

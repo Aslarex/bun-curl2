@@ -1,5 +1,7 @@
 import type { RedisClientOptions } from 'redis';
 import CustomHeaders from './models/headers';
+import { TLS } from './models/constants';
+import { LocalCache } from './services/cacheStore';
 
 /**
  * Represents a connection to a Redis server and provides basic operations.
@@ -36,7 +38,7 @@ interface RedisServer {
   set: (
     key: string,
     value: string,
-    options: { EX?: number; NX?: true }
+    options: { EX?: number; NX?: true },
   ) => Promise<string | null>;
 
   /**
@@ -75,6 +77,11 @@ type CacheType =
   | (BaseCache & { server?: never; options?: never; mode?: 'redis' })
   | (BaseCache & { mode?: 'local' });
 
+type UsableCache = {
+  server: RedisServer | LocalCache<string>;
+  defaultExpiration?: number;
+};
+
 /**
  * Initialization options for configuring requests.
  */
@@ -85,7 +92,7 @@ type GlobalInit = {
    * @param args - The initial RequestInit object.
    * @returns A transformed RequestInit object.
    */
-  transfomRequest?: (args: RequestInit & { url: string }) => RequestInit;
+  transfomRequest?: (args: RequestInitWithURL) => RequestInit;
 
   /**
    * Enables response compression if set to true.
@@ -145,16 +152,17 @@ interface Connection {
    */
   tls?: {
     /**
-     * Supported cipher suites for TLS 1.2 and TLS 1.3.
+     * Supported cipher suites.
      */
     ciphers?: {
-      TLS12?: string[] | string;
+      DEFAULT?: string[] | string;
       TLS13?: string[] | string;
     };
     /**
      * Supported TLS versions.
+     * @default 771,772
      */
-    versions?: (1.3 | 1.2)[];
+    versions?: (typeof TLS)[keyof typeof TLS][];
 
     /**
      * Disable certificate checks for HTTPS targets
@@ -197,6 +205,8 @@ interface Connection {
 
 export type CacheKeys = 'url' | 'body' | 'headers' | 'proxy' | 'method';
 
+export type RequestInitWithURL<T = any> = RequestInit<T> & { url: string };
+
 /**
  * Extra options to enhance request and response handling.
  *
@@ -210,9 +220,7 @@ interface ExtraOptions<T> {
    * @returns A transformed RequestInit object.
    * @override GlobalInit.transformRequest
    */
-  transformRequest?:
-    | ((args: RequestInit<T> & { url: string }) => RequestInit<T>)
-    | false;
+  transformRequest?: ((args: RequestInitWithURL<T>) => RequestInit<T>) | false;
 
   /**
    * Function to transform the response before it is returned to the caller.
@@ -221,7 +229,7 @@ interface ExtraOptions<T> {
    * @returns A transformed Response object.
    */
   transformResponse?: (
-    args: ResponseInit<T>
+    args: ResponseInit<T>,
   ) => ResponseInit<T> | Promise<ResponseInit<T>>;
 
   /**
@@ -253,9 +261,7 @@ interface ExtraOptions<T> {
          * Function for manually generating the cache identifier (key)
          * @override `cache.keys`
          */
-        generate?: (
-          request: RequestInit<T> & { url: string }
-        ) => string | Promise<string>;
+        generate?: (request: RequestInitWithURL<T>) => string | Promise<string>;
       };
   /**
    * Enables response compression if set to true.
@@ -471,6 +477,7 @@ export type {
   RequestInit,
   ResponseInit,
   CacheType,
+  UsableCache,
   GlobalInit,
   BaseResponseInit,
   RedisServer,

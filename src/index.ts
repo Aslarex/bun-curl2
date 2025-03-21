@@ -4,6 +4,7 @@ if (!('BUN_CONFIG_DNS_TIME_TO_LIVE_SECONDS' in process.env)) {
 import HTTPRequest from './services/http';
 import type {
   RequestInit,
+  RequestInitWithURL,
   ResponseInit,
   CacheType,
   GlobalInit,
@@ -12,13 +13,16 @@ import type {
   BaseRequestInit,
   BaseCache,
   CacheKeys,
+  UsableCache,
 } from './types';
 import Headers from './models/headers';
-import { LocalCache } from './services/local_cache';
+import { LocalCache } from './services/cacheStore';
 import { ResponseWrapper } from './services/response';
+import { DNS_CACHE_MAP, TLS } from './models/constants';
 
 export type {
   RequestInit,
+  RequestInitWithURL,
   BaseResponseInit,
   CacheType,
   GlobalInit,
@@ -36,6 +40,7 @@ export {
   HTTPRequest,
   Headers,
   ResponseWrapper,
+  TLS,
 };
 
 /**
@@ -52,10 +57,7 @@ export class BunCurl2 {
    *
    * @private
    */
-  private cache?: {
-    server: RedisServer | LocalCache<string>;
-    defaultExpiration?: number;
-  };
+  private cache?: UsableCache;
 
   /**
    * Creates an instance of BunCurl2.
@@ -65,6 +67,9 @@ export class BunCurl2 {
   constructor(private args: GlobalInit & { cache?: CacheType } = {}) {}
 
   /**
+   * *NOTE: this will be renamed to `BunCurl2.init` for future planned updates, its better to start using `BunCurl2.init` as of now.*
+   *
+   * @description
    * Initializes the cache based on the provided configuration.
    *
    * If no cache configuration is provided, returns false.
@@ -104,14 +109,14 @@ export class BunCurl2 {
           break;
         default:
           console.error(
-            `[BunCurl2] - Received invalid cache mode (${this.args.cache.mode})`
+            `[BunCurl2] - Received invalid cache mode (${this.args.cache.mode})`,
           );
           return false;
       }
       return true;
     } catch (e) {
       const cacheInitializationError = new Error(
-        '[BunCurl2] - Initializing cache has failed'
+        '[BunCurl2] - Initializing cache has failed',
       );
       Object.defineProperties(cacheInitializationError, {
         code: {
@@ -126,6 +131,19 @@ export class BunCurl2 {
   }
 
   /**
+   * @alias initializeCache
+   */
+  init = this.initializeCache;
+
+  /**
+   * @alias initializeCache
+   */
+  connect = this.initializeCache;
+
+  /**
+   * NOTE: this will be renamed to `BunCurl2.destroy` for future planned updates, its better to start using `BunCurl2.destroy` as of now.
+   *
+   * @description
    * Disconnects the cache server.
    *
    * If the cache is a local cache, it calls its `end` method.
@@ -134,12 +152,23 @@ export class BunCurl2 {
    * @returns {Promise<void>} A promise that resolves when the cache is disconnected.
    */
   async disconnectCache(): Promise<void> {
+    DNS_CACHE_MAP.stopCleanup(), DNS_CACHE_MAP.clear();
     const server = this.cache?.server;
     if (!server) return void 0;
     return server instanceof LocalCache
       ? (server.end(), void 0)
       : server?.disconnect();
   }
+
+  /**
+   * @alias disconnectCache
+   */
+  destroy = this.disconnectCache;
+
+  /**
+   * @alias disconnectCache
+   */
+  disconnect = this.disconnectCache;
 
   /**
    * Internal method to perform an HTTP request.
@@ -154,12 +183,12 @@ export class BunCurl2 {
   private async request<T = any>(
     url: string,
     method: RequestInit['method'],
-    options: RequestInit<T> = {}
+    options: RequestInit<T> = {},
   ): Promise<ResponseInit<T>> {
     return HTTPRequest<T>(
       url,
       { ...options, method },
-      { ...this.args, cache: this.cache }
+      { ...this.args, cache: this.cache },
     );
   }
 
@@ -173,7 +202,7 @@ export class BunCurl2 {
    */
   async fetch<T = any>(
     url: string,
-    options?: RequestInit<T>
+    options?: RequestInit<T>,
   ): Promise<ResponseInit<T>> {
     return this.request<T>(url, options?.method || 'GET', options);
   }
@@ -188,7 +217,7 @@ export class BunCurl2 {
    */
   async get<T = any>(
     url: string,
-    options?: Omit<RequestInit<T>, 'method' | 'body'>
+    options?: Omit<RequestInit<T>, 'method' | 'body'>,
   ): Promise<ResponseInit<T>> {
     return this.request<T>(url, 'GET', options);
   }
@@ -203,7 +232,7 @@ export class BunCurl2 {
    */
   async post<T = any>(
     url: string,
-    options?: Omit<RequestInit<T>, 'method'>
+    options?: Omit<RequestInit<T>, 'method'>,
   ): Promise<ResponseInit<T>> {
     return this.request<T>(url, 'POST', options);
   }
@@ -218,7 +247,7 @@ export class BunCurl2 {
    */
   async delete<T = any>(
     url: string,
-    options?: Omit<RequestInit<T>, 'method'>
+    options?: Omit<RequestInit<T>, 'method'>,
   ): Promise<ResponseInit<T>> {
     return this.request<T>(url, 'DELETE', options);
   }
@@ -233,7 +262,7 @@ export class BunCurl2 {
    */
   async put<T = any>(
     url: string,
-    options?: Omit<RequestInit<T>, 'method'>
+    options?: Omit<RequestInit<T>, 'method'>,
   ): Promise<ResponseInit<T>> {
     return this.request<T>(url, 'PUT', options);
   }
@@ -248,7 +277,7 @@ export class BunCurl2 {
    */
   async patch<T = any>(
     url: string,
-    options?: Omit<RequestInit<T>, 'method'>
+    options?: Omit<RequestInit<T>, 'method'>,
   ): Promise<ResponseInit<T>> {
     return this.request<T>(url, 'PATCH', options);
   }
@@ -263,7 +292,7 @@ export class BunCurl2 {
    */
   async head<T = any>(
     url: string,
-    options?: Omit<RequestInit<T>, 'method' | 'body'>
+    options?: Omit<RequestInit<T>, 'method' | 'body'>,
   ): Promise<ResponseInit<T>> {
     return this.request<T>(url, 'HEAD', options);
   }

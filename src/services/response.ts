@@ -13,7 +13,7 @@ class ResponseWrapper<T> {
     public type: string,
     public cached: boolean,
     public elapsedTime: number,
-    public options: RequestInit<T>
+    public options: RequestInit<T>,
   ) {}
 
   /**
@@ -55,14 +55,14 @@ class ResponseWrapper<T> {
 function BuildResponse<T>(
   responseData: BaseResponseInit,
   options: RequestInit<T>,
-  initialized: GlobalInit
+  initialized: GlobalInit,
 ): ResponseWrapper<T> {
   if (initialized.maxBodySize) {
     const MAX_BODY_SIZE = initialized.maxBodySize * 1024 * 1024;
 
     if (responseData.body.length > MAX_BODY_SIZE) {
       const maxBodySizeError = new Error(
-        `[BunCurl2] - Maximum body size exceeded (${responseData.body.length / (1024 * 1024)})`
+        `[BunCurl2] - Maximum body size exceeded (${responseData.body.length / (1024 * 1024)})`,
       );
       Object.defineProperty(maxBodySizeError, 'code', {
         value: 'ERR_BODY_SIZE_EXCEEDED',
@@ -73,7 +73,7 @@ function BuildResponse<T>(
 
   // Detect Content-Type to handle text vs non-text responses
   const contentTypeHeader = responseData.headers.find(
-    ([key]) => key.toLowerCase() === 'content-type'
+    ([key]) => key.toLowerCase() === 'content-type',
   );
   const contentType = contentTypeHeader ? contentTypeHeader[1] : '';
 
@@ -115,7 +115,7 @@ function BuildResponse<T>(
     type,
     responseData.cached,
     performance.now() - responseData.requestStartTime,
-    options
+    options,
   );
 
   return response;
@@ -126,25 +126,27 @@ function ProcessResponse(
   stdout: string,
   requestStartTime: number,
   parseJSON: boolean,
-  cached: boolean
+  cached: boolean,
 ): BaseResponseInit {
   const len = stdout.length;
   let headerStartIndex = -1;
   // Scan backward for a newline followed by "HTTP/" to locate the final header block.
   for (let i = len - 6; i >= 0; i--) {
     // Check for "\nHTTP/" (or if at the very beginning, "HTTP/" at position 0)
-    if ((i === 0 && stdout.startsWith("HTTP/")) ||
-        (stdout.charAt(i) === "\n" && stdout.substr(i + 1, 5) === "HTTP/")) {
-      headerStartIndex = (i === 0) ? 0 : i + 1;
+    if (
+      (i === 0 && stdout.startsWith('HTTP/')) ||
+      (stdout.charAt(i) === '\n' && stdout.substring(i + 1, 5) === 'HTTP/')
+    ) {
+      headerStartIndex = i === 0 ? 0 : i + 1;
       break;
     }
   }
   if (headerStartIndex === -1) {
     // Fallback to lastIndexOf if backward scan failed.
-    headerStartIndex = stdout.lastIndexOf("HTTP/");
+    headerStartIndex = stdout.lastIndexOf('HTTP/');
     if (headerStartIndex === -1) {
       const invalidBodyError = new Error(
-        `[BunCurl2] - Received unknown response (${stdout})`
+        `[BunCurl2] - Received unknown response (${stdout})`,
       );
       Object.defineProperty(invalidBodyError, 'code', {
         value: 'ERR_INVALID_RESPONSE_BODY',
@@ -154,15 +156,15 @@ function ProcessResponse(
   }
 
   // Now search for the header/body delimiter starting at headerStartIndex.
-  let headerEndIndex = stdout.indexOf("\r\n\r\n", headerStartIndex);
+  let headerEndIndex = stdout.indexOf('\r\n\r\n', headerStartIndex);
   let delimiterLength = 4;
   if (headerEndIndex === -1) {
-    headerEndIndex = stdout.indexOf("\n\n", headerStartIndex);
+    headerEndIndex = stdout.indexOf('\n\n', headerStartIndex);
     delimiterLength = 2;
   }
   if (headerEndIndex === -1) {
     const invalidBodyError = new Error(
-      `[BunCurl2] - Received unknown response (${stdout})`
+      `[BunCurl2] - Received unknown response (${stdout})`,
     );
     Object.defineProperty(invalidBodyError, 'code', {
       value: 'ERR_INVALID_RESPONSE_BODY',
@@ -175,14 +177,14 @@ function ProcessResponse(
   const body = stdout.substring(headerEndIndex + delimiterLength).trim();
 
   // Process the status line.
-  let firstLineEnd = headerBlock.indexOf("\r\n");
-  if (firstLineEnd === -1) firstLineEnd = headerBlock.indexOf("\n");
+  let firstLineEnd = headerBlock.indexOf('\r\n');
+  if (firstLineEnd === -1) firstLineEnd = headerBlock.indexOf('\n');
   if (firstLineEnd === -1) firstLineEnd = headerBlock.length;
   const statusLine = headerBlock.substring(0, firstLineEnd);
   let status = 500;
-  const firstSpace = statusLine.indexOf(" ");
+  const firstSpace = statusLine.indexOf(' ');
   if (firstSpace !== -1) {
-    const secondSpace = statusLine.indexOf(" ", firstSpace + 1);
+    const secondSpace = statusLine.indexOf(' ', firstSpace + 1);
     const codeStr =
       secondSpace !== -1
         ? statusLine.substring(firstSpace + 1, secondSpace)
@@ -194,18 +196,18 @@ function ProcessResponse(
   const headers: string[][] = [];
   let pos = firstLineEnd;
   // Determine the newline length (CRLF or LF) based on the first line break.
-  let newlineLen = headerBlock.charAt(pos) === "\r" ? 2 : 1;
+  let newlineLen = headerBlock.charAt(pos) === '\r' ? 2 : 1;
   pos += newlineLen; // Skip the status line.
 
   while (pos < headerBlock.length) {
     let nextPos = pos;
     while (nextPos < headerBlock.length) {
       const ch = headerBlock.charAt(nextPos);
-      if (ch === "\r" || ch === "\n") break;
+      if (ch === '\r' || ch === '\n') break;
       nextPos++;
     }
     const line = headerBlock.substring(pos, nextPos);
-    const colonIndex = line.indexOf(": ");
+    const colonIndex = line.indexOf(': ');
     if (colonIndex !== -1) {
       headers.push([
         line.substring(0, colonIndex),
@@ -215,8 +217,8 @@ function ProcessResponse(
     // Advance pos: handle both CRLF and LF.
     if (nextPos < headerBlock.length) {
       if (
-        headerBlock.charAt(nextPos) === "\r" &&
-        headerBlock.charAt(nextPos + 1) === "\n"
+        headerBlock.charAt(nextPos) === '\r' &&
+        headerBlock.charAt(nextPos + 1) === '\n'
       ) {
         pos = nextPos + 2;
       } else {
@@ -237,6 +239,5 @@ function ProcessResponse(
     cached,
   };
 }
-
 
 export { ProcessResponse, BuildResponse, ResponseWrapper };

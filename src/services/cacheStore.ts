@@ -14,9 +14,10 @@ export class LocalCache<T = any> {
 
   constructor(private options?: Options) {
     this.data = new Map();
-    // Run cleanup every minute (60 * 1000 ms)
-    !options?.noInterval &&
-      (this.cleanupInterval = setInterval(() => this.cleanup(), 60 * 1000));
+    if (!options?.noInterval) {
+      // Run cleanup every minute (60 * 1000 ms)
+      this.cleanupInterval = setInterval(() => this.cleanup(), 60 * 1000);
+    }
   }
 
   /**

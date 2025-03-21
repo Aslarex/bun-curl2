@@ -1,10 +1,11 @@
 import type { GlobalInit, RequestInit } from '../types';
 import {
   CURL,
-  CIPHERS,
   DEFAULT_DNS_SERVERS,
   CURL_VERSION,
   CURL_OUTPUT,
+  TLS,
+  DNS_CACHE_MAP,
 } from '../models/constants';
 import formatProxyString from '../models/proxy';
 import {
@@ -16,7 +17,6 @@ import {
   isValidIPv4,
 } from '../models/utils';
 import { Buffer } from 'buffer';
-import { LocalCache } from './local_cache';
 import { dns } from 'bun';
 
 const SUPPORTS = {
@@ -25,30 +25,14 @@ const SUPPORTS = {
   DNS_RESOLVE: compareVersions(CURL_VERSION, '7.21.3') >= 0,
   TCP_FASTOPEN: compareVersions(CURL_VERSION, '7.49.0') >= 0,
   TCP_NODELAY: compareVersions(CURL_VERSION, '7.11.2') >= 0,
-  CIPHERS: (() => {
-    const libs = [
-      'openssl',
-      'libressl',
-      'boringssl',
-      'quictls',
-      'wolfssl',
-      'gnutls',
-    ];
-    return libs.some(lib => CURL_OUTPUT.indexOf(lib) !== -1);
-  })(),
 };
-
-const DNS_CACHE_MAP = new LocalCache<string>({
-  maxItems: 255,
-  noInterval: true,
-});
 
 /**
  * Helper: Build a multipart/form-data payload from a FormData instance.
  * Returns a Buffer payload and the boundary string.
  */
 async function buildMultipartBody(
-  formData: FormData
+  formData: FormData,
 ): Promise<{ body: Buffer; boundary: string }> {
   const boundary =
     '----WebKitFormBoundary' + Math.random().toString(36).substring(2);
@@ -96,7 +80,7 @@ async function buildMultipartBody(
  * any headers that need to be set.
  */
 async function prepareRequestBody(
-  body: any
+  body: any,
 ): Promise<{ body: string | Buffer; type?: string }> {
   // URLSearchParams: convert to URL-encoded string.
   if (body instanceof URLSearchParams) {
@@ -159,26 +143,24 @@ async function prepareRequestBody(
 export default async function BuildCommand<T>(
   url: URL,
   options: RequestInit<T>,
-  init: GlobalInit
-) {
+  init: GlobalInit,
+): Promise<string[]> {
+  // ── Transform Request & Set Defaults ──
+  const urlString = url.toString();
   if (options.transformRequest) {
-    options = options.transformRequest({ url: url.toString(), ...options });
+    options = options.transformRequest({ url: urlString, ...options });
   } else if (init.transfomRequest && options.transformRequest !== false) {
-    options = init.transfomRequest({ url: url.toString(), ...options });
+    options = init.transfomRequest({ url: urlString, ...options });
   }
-
-  // Set default values.
   const maxTime = options.maxTime ?? 10;
   const connectionTimeout = options.connectionTimeout ?? 5;
   const compress = options.compress!;
-  const ciphers_tls12 = options.tls?.ciphers?.TLS12 ?? CIPHERS['TLS12'];
-  const ciphers_tls13 = options.tls?.ciphers?.TLS13 ?? CIPHERS['TLS13'];
   const tls_insecure = options.tls?.insecure ?? false;
-  const tls_versions = options.tls?.versions ?? [1.3, 1.2];
+  const tls_versions = options.tls?.versions ?? [TLS.Version12, TLS.Version13];
   const httpVersion = options.http?.version ?? (SUPPORTS.HTTP2 ? 2.0 : 1.1);
   const dnsServers = options.dns?.servers ?? DEFAULT_DNS_SERVERS;
 
-  // Build the base curl command.
+  // ── Build Base Command ──
   const command: string[] = [
     CURL.BASE,
     CURL.INFO,
@@ -187,61 +169,64 @@ export default async function BuildCommand<T>(
     CURL.WRITE_OUT,
     '\nFinal-Url:%{url_effective}',
     CURL.TIMEOUT,
-    String(maxTime),
+    maxTime.toString(),
     CURL.CONNECT_TIMEOUT,
-    String(connectionTimeout),
+    connectionTimeout.toString(),
     CURL.HTTP_VERSION[httpVersion],
   ];
 
-  if (tls_insecure) {
-    command.push(CURL.INSECURE);
+  // ── Append TLS & Cipher Settings ──
+  if (tls_insecure) command.push(CURL.INSECURE);
+  const tlsMap: Record<number, { flag: string; str: string }> = {
+    769: { flag: CURL.TLSv1_0, str: '1.0' },
+    770: { flag: CURL.TLSv1_1, str: '1.1' },
+    771: { flag: CURL.TLSv1_2, str: '1.2' },
+    772: { flag: CURL.TLSv1_3, str: '1.3' },
+  };
+  if (tls_versions.length) {
+    const lowest = Math.min(...tls_versions);
+    const highest = Math.max(...tls_versions);
+    if (tlsMap[lowest]) command.push(tlsMap[lowest].flag);
+    if (tlsMap[highest]) command.push(CURL.TLS_MAX, tlsMap[highest].str);
   }
-
-  if (tls_versions.includes(1.2)) {
-    command.push(CURL.TLSv1_2);
-    if (SUPPORTS.CIPHERS) {
+  if (options.tls?.ciphers) {
+    const ciphers = options.tls.ciphers;
+    if (ciphers.DEFAULT) {
       command.push(
         CURL.CIPHERS,
-        Array.isArray(ciphers_tls12) ? ciphers_tls12.join(':') : ciphers_tls12
+        typeof ciphers.DEFAULT === 'string'
+          ? ciphers.DEFAULT
+          : ciphers.DEFAULT.join(':'),
       );
     }
-  }
-
-  if (tls_versions.includes(1.3)) {
-    const delta = tls_versions.includes(1.2)
-      ? [CURL.TLS_MAX, '1.3']
-      : [CURL.TLSv1_3];
-    command.push(...delta);
-    if (SUPPORTS.CIPHERS) {
+    if (ciphers.TLS13 && tls_versions.includes(772)) {
       command.push(
         CURL.TLS13_CIPHERS,
-        Array.isArray(ciphers_tls13) ? ciphers_tls13.join(':') : ciphers_tls13
+        typeof ciphers.TLS13 === 'string'
+          ? ciphers.TLS13
+          : ciphers.TLS13.join(':'),
       );
     }
   }
 
-  if (compress) {
-    command.push(CURL.COMPRESSED);
-  }
-
-  if (SUPPORTS.DNS_SERVERS) {
+  // ── Append Compression, DNS Servers & DNS Resolve ──
+  if (compress) command.push(CURL.COMPRESSED);
+  if (SUPPORTS.DNS_SERVERS)
     command.push(CURL.DNS_SERVERS, dnsServers.join(','));
-  }
 
   if (SUPPORTS.DNS_RESOLVE && containsAlphabet(url.host)) {
-    let i: string | null = null,
-      resolveIP =
-        (options.dns?.resolve ?? options.dns?.cache !== false)
-          ? ((i = DNS_CACHE_MAP.get(url.host)), i)
-          : null;
-    if (!resolveIP) {
-      const lookup = await dns.lookup(url.host, { family: 4 });
-      if (lookup.length) {
-        resolveIP = lookup[0].address;
-      }
+    let resolveIP: string | null = null;
+    let cachedIP = DNS_CACHE_MAP.get(url.host) || undefined;
+    if ((options.dns?.resolve ?? options.dns?.cache !== false) && cachedIP) {
+      resolveIP = cachedIP;
+    } else {
+      try {
+        const lookup = await dns.lookup(url.host, { family: 4 });
+        if (lookup.length) resolveIP = lookup[0].address;
+      } catch {}
     }
     if (resolveIP && isValidIPv4(resolveIP)) {
-      if (options.dns?.cache !== false && !i) {
+      if (options.dns?.cache !== false && !cachedIP) {
         DNS_CACHE_MAP.set(url.host, resolveIP, options.dns?.cache ?? 300);
       }
       const port = getDefaultPort(url.protocol);
@@ -249,81 +234,80 @@ export default async function BuildCommand<T>(
     }
   }
 
-  if (
-    init.tcp?.fastOpen &&
-    httpVersion !== 1.1 &&
-    !options.http?.keepAlive &&
-    SUPPORTS.TCP_FASTOPEN
-  ) {
+  // ── Append TCP Options & Proxy ──
+  if (init.tcp?.fastOpen && SUPPORTS.TCP_FASTOPEN)
     command.push(CURL.TCP_FASTOPEN);
-  }
+  if (init.tcp?.noDelay && SUPPORTS.TCP_NODELAY) command.push(CURL.TCP_NODELAY);
+  if (options.proxy) command.push(CURL.PROXY, formatProxyString(options.proxy));
 
-  if (init.tcp?.noDelay && SUPPORTS.TCP_NODELAY) {
-    command.push(CURL.TCP_NODELAY);
-  }
-
-  if (options.proxy) {
-    command.push(CURL.PROXY, formatProxyString(options.proxy));
-  }
-
+  // ── Append Follow Redirect & HTTP Keep-Alive Options ──
   if (options.follow !== undefined && options.follow !== false) {
     command.push(
       CURL.FOLLOW,
       CURL.MAX_REDIRS,
-      typeof options.follow === 'number' ? String(options.follow) : '10'
+      typeof options.follow === 'number' ? options.follow.toString() : '10',
     );
   }
-
   if (httpVersion === 1.1) {
     if (options.http?.keepAlive === false || options.http?.keepAlive === 0) {
       command.push(CURL.NO_KEEPALIVE);
     } else if (typeof options.http?.keepAlive === 'number') {
-      command.push(CURL.KEEPALIVE_TIME, String(options.http.keepAlive));
+      command.push(CURL.KEEPALIVE_TIME, options.http.keepAlive.toString());
     }
     if (typeof options.http?.keepAliveProbes === 'number') {
-      command.push(CURL.KEEPALIVE_CNT, String(options.http.keepAliveProbes));
+      command.push(CURL.KEEPALIVE_CNT, options.http.keepAliveProbes.toString());
     }
   }
 
-  // --- Build headers ---
-  const headers: Headers = !options.headers
-    ? new Headers()
-    : options.headers instanceof Headers
-      ? options.headers
-      : new Headers(
-          Object.entries(options.headers)
-            .filter(([_, value]) => value !== undefined)
-            .map(([key, value]) => [key, String(value)] as [string, string])
-        );
-
+  // ── Prepare Request Body ──
+  let prepared: { body: string | Buffer; type?: string } | undefined;
   if (options.body) {
-    const prepared = await prepareRequestBody(options.body);
+    prepared = await prepareRequestBody(options.body);
+    const bodyData =
+      typeof prepared.body === 'string'
+        ? prepared.body
+        : prepared.body.toString('utf-8');
+    command.push(CURL.DATA_RAW, bodyData);
+  }
 
-    if (prepared.type && !headers.has('content-type')) {
-      headers.set('content-type', prepared.type);
-    }
-
-    if (typeof prepared.body === 'string') {
-      command.push(CURL.DATA_RAW, prepared.body);
+  // ── Append Headers (Combined Loop) ──
+  // We combine header extraction and command push in one loop.
+  // The user-agent header is deliberately skipped so it can be added via CURL.USER_AGENT.
+  let headerKeys = new Set<string>(),
+    userAgent: string = init.defaultAgent || `Bun/${Bun.version}`;
+  if (options.headers) {
+    if (options.headers instanceof Headers) {
+      for (const [key, value] of options.headers.entries()) {
+        const lowerKey = key.toLowerCase();
+        headerKeys.add(lowerKey);
+        if (lowerKey !== 'user-agent') {
+          command.push(CURL.HEADER, `${key}: ${value}`);
+        } else userAgent = value;
+      }
     } else {
-      command.push(CURL.DATA_RAW, prepared.body.toString('utf-8'));
+      for (const [key, value] of Object.entries(options.headers)) {
+        if (value !== undefined) {
+          const lowerKey = key.toLowerCase();
+          headerKeys.add(lowerKey);
+          if (lowerKey !== 'user-agent') {
+            command.push(CURL.HEADER, `${key}: ${value}`);
+          } else userAgent = value;
+        }
+      }
     }
   }
+  // Always add user-agent using -A flag.
+  command.push(CURL.USER_AGENT, userAgent);
 
-  // Set default user agent if not provided.
-  if (!headers.has('user-agent') && init.defaultAgent) {
-    command.push(CURL.USER_AGENT, init.defaultAgent);
+  if (prepared && prepared.type && !headerKeys.has('content-type')) {
+    command.push(CURL.HEADER, `content-type: ${prepared.type}`);
   }
 
-  // Append headers to the command.
-  for (const [key, value] of headers as unknown as Iterable<[string, string]>) {
-    command.push(CURL.HEADER, `${key}: ${value}`);
-  }
-
+  // ── Append HTTP Method & Final URL ──
   command.push(CURL.METHOD, options.method!.toUpperCase());
-
-  // Properly encode [ and ] in the URL.
-  command.push(url.toString().replaceAll('[', '%5B').replaceAll(']', '%5D'));
+  command.push(
+    urlString.replace(/[\[\]]/g, char => (char === '[' ? '%5B' : '%5D')),
+  );
 
   return command;
 }

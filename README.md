@@ -14,8 +14,8 @@ BunCurl2 is a **super-fast, fetch-like HTTP client** for [Bun](https://bun.sh)! 
   Take advantage of modern protocols (requires appropriate cURL build).
 - **Custom TLS & Ciphers:**  
   Enhance security by fine-tuning TLS settings.
-- **Flexible Caching:**  
-  - **Default (recommended):** Redis, ideal for persistent or long-lived caching.  
+- **Flexible Caching:**
+  - **Default (recommended):** Redis, ideal for persistent or long-lived caching.
   - **Optional:** Local, memory-based caching using JavaScript's Map object, suitable for short-term caching within the same process.
 - **Type-Safe Requests & Responses:**  
   Enjoy clear and maintainable TypeScript typings.
@@ -43,7 +43,7 @@ bun add bun-curl2
 ## 📋 Requirements
 
 | Tool | Minimum Version | Recommended Version |
-|------|-----------------|---------------------|
+| ---- | --------------- | ------------------- |
 | Bun  | ^1.2.0          | Latest              |
 | cURL | ^7.0.0          | Latest              |
 
@@ -72,16 +72,19 @@ const client = new BunCurl2({
   },
   tcp: {
     fastOpen: true,
-    noDelay: true
+    noDelay: true,
   },
-  transformRequest: (opts) => opts,
+  transformRequest: opts => opts,
 });
 
 // (Optional) Initialize cache if caching is enabled.
-await client.initializeCache();
+await client.connect();
 
 // Make a GET request with type-safe response handling:
-const req: ResponseInit<Record<string, string>> = await client.get('https://api.example.com/data', { cache: true });
+const req: ResponseInit<Record<string, string>> = await client.get(
+  'https://api.example.com/data',
+  { cache: true }
+);
 
 /*
 Response Details:
@@ -101,7 +104,9 @@ For simpler use cases, you can directly use a familiar fetch-like syntax:
 ```ts
 import { fetch } from 'bun-curl2';
 
-const req: ResponseInit<string> = await fetch<string>('https://www.example.com');
+const req: ResponseInit<string> = await fetch<string>(
+  'https://www.example.com'
+);
 
 console.log('Status:', req.status);
 console.log('Response:', req.response);
@@ -116,7 +121,6 @@ console.log('Response:', req.response);
   - `ip:port`
   - `ip:port:user:pass`
   - `user:pass@ip:port`
-  
 - **Custom Headers & Body:**  
   Supports sending strings, objects, Blobs, BufferSources, FormData, URLSearchParams, and ReadableStreams.  
   Automatically detects `Content-Type`, but setting manually is recommended.
@@ -149,4 +153,3 @@ As this is a solo-maintained project, your feedback, issues, or pull requests ar
 ## 🏳️ License
 
 This project is proudly licensed under the **[WTFPL](./LICENSE)**.
-

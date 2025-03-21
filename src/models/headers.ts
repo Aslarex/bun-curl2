@@ -7,7 +7,7 @@ import { types } from 'node:util';
 const validateHeaderName = (name: string): void => {
   if (!/^[\^`\-\w!#$%&'*+.|~]+$/.test(name)) {
     const error = new TypeError(
-      `[BunCurl2] - Header name must be a valid HTTP token [${name}]`
+      `[BunCurl2] - Header name must be a valid HTTP token [${name}]`,
     );
     Object.defineProperty(error, 'code', {
       value: 'ERR_INVALID_HTTP_TOKEN',
@@ -23,7 +23,7 @@ const validateHeaderName = (name: string): void => {
 const validateHeaderValue = (name: string, value: string): void => {
   if (/[^\t\u0020-\u007E\u0080-\u00FF]/.test(value)) {
     const error = new TypeError(
-      `[BunCurl2] - Invalid character in header content ["${name}"]`
+      `[BunCurl2] - Invalid character in header content ["${name}"]`,
     );
     Object.defineProperty(error, 'code', {
       value: 'ERR_INVALID_CHAR',
@@ -79,7 +79,7 @@ export default class Headers extends URLSearchParams {
           .map(pair => {
             if (typeof pair !== 'object' || types.isBoxedPrimitive(pair)) {
               throw new TypeError(
-                '[BunCurl2] - Each header pair must be an iterable object'
+                '[BunCurl2] - Each header pair must be an iterable object',
               );
             }
             return [...pair] as string[];
@@ -87,7 +87,7 @@ export default class Headers extends URLSearchParams {
           .map(pair => {
             if (pair.length !== 2) {
               throw new TypeError(
-                '[BunCurl2] - Each header pair must be a name/value tuple'
+                '[BunCurl2] - Each header pair must be a name/value tuple',
               );
             }
             return pair;
@@ -95,7 +95,7 @@ export default class Headers extends URLSearchParams {
       }
     } else {
       throw new TypeError(
-        "[BunCurl2] - Failed to construct 'Headers': The provided value is not of type '(sequence<sequence<ByteString>> or record<ByteString, ByteString>)'"
+        "[BunCurl2] - Failed to construct 'Headers': The provided value is not of type '(sequence<sequence<ByteString>> or record<ByteString, ByteString>)'",
       );
     }
 
@@ -123,7 +123,7 @@ export default class Headers extends URLSearchParams {
                 URLSearchParams.prototype.append as (
                   this: URLSearchParams,
                   name: string,
-                  value: string
+                  value: string,
                 ) => void
               ).call(target, name.toLowerCase(), String(value));
             };
@@ -136,7 +136,7 @@ export default class Headers extends URLSearchParams {
                 URLSearchParams.prototype.set as (
                   this: URLSearchParams,
                   name: string,
-                  value: string
+                  value: string,
                 ) => void
               ).call(target, name.toLowerCase(), String(value));
             };
@@ -147,7 +147,7 @@ export default class Headers extends URLSearchParams {
               (
                 URLSearchParams.prototype.delete as (
                   this: URLSearchParams,
-                  name: string
+                  name: string,
                 ) => void
               ).call(target, name.toLowerCase());
             };
@@ -158,7 +158,7 @@ export default class Headers extends URLSearchParams {
               return (
                 URLSearchParams.prototype.has as (
                   this: URLSearchParams,
-                  name: string
+                  name: string,
                 ) => boolean
               ).call(target, name.toLowerCase());
             };
@@ -169,7 +169,7 @@ export default class Headers extends URLSearchParams {
               return (
                 URLSearchParams.prototype.getAll as (
                   this: URLSearchParams,
-                  name: string
+                  name: string,
                 ) => string[]
               ).call(target, name.toLowerCase());
             };
@@ -180,9 +180,9 @@ export default class Headers extends URLSearchParams {
               return new Set(
                 (
                   URLSearchParams.prototype.keys as (
-                    this: URLSearchParams
+                    this: URLSearchParams,
                   ) => IterableIterator<string>
-                ).call(target)
+                ).call(target),
               ).values();
             };
           }
@@ -221,7 +221,7 @@ export default class Headers extends URLSearchParams {
 
   forEach(
     callback: (value: string, key: string, parent: URLSearchParams) => void,
-    thisArg?: any
+    thisArg?: any,
   ): void {
     for (const name of this.keys()) {
       Reflect.apply(callback, thisArg, [this.get(name)!, name, this]);
@@ -263,7 +263,7 @@ export default class Headers extends URLSearchParams {
         result[key] = this.getAll(key);
         return result;
       },
-      {} as Record<string, string[]>
+      {} as Record<string, string[]>,
     );
   }
 
@@ -285,7 +285,7 @@ export default class Headers extends URLSearchParams {
         }
         return result;
       },
-      {} as Record<string, string | string[]>
+      {} as Record<string, string | string[]>,
     );
   }
 }
@@ -300,8 +300,8 @@ Object.defineProperties(
       result[property] = { enumerable: true };
       return result;
     },
-    {} as Record<string, PropertyDescriptor>
-  )
+    {} as Record<string, PropertyDescriptor>,
+  ),
 );
 
 /**

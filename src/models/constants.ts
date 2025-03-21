@@ -1,4 +1,5 @@
 import { $ } from 'bun';
+import { LocalCache } from '../services/cacheStore';
 
 // Define constants for CURL options.
 const CURL = {
@@ -15,10 +16,12 @@ const CURL = {
     1.1: '--http1.1',
   },
   INSECURE: '--insecure',
+  TLSv1_0: '--tlsv1.0',
+  TLSv1_1: '--tlsv1.1',
   TLSv1_2: '--tlsv1.2',
+  TLSv1_3: '--tlsv1.3',
   CIPHERS: '--ciphers',
   TLS_MAX: '--tls-max',
-  TLSv1_3: '--tlsv1.3',
   TLS13_CIPHERS: '--tls13-ciphers',
   COMPRESSED: '--compressed',
   PROXY: '--proxy',
@@ -37,13 +40,24 @@ const CURL = {
   METHOD: '-X',
 };
 
-// Default ciphers
-const CIPHERS = {
-  TLS12:
-    'ECDHE-RSA-AES128-SHA:ECDHE-RSA-AES256-SHA:DHE-RSA-AES128-SHA:DHE-RSA-AES256-SHA',
-  TLS13:
-    'TLS_AES_128_GCM_SHA256:TLS_AES_256_GCM_SHA384:TLS_CHACHA20_POLY1305_SHA256',
-};
+const TLS = {
+  /**
+   * TLS 1.0
+   */
+  Version10: 0x0301,
+  /**
+   * TLS 1.1
+   */
+  Version11: 0x0302,
+  /**
+   * TLS 1.2
+   */
+  Version12: 0x0303,
+  /**
+   * TLS 1.3
+   */
+  Version13: 0x0304,
+} as const;
 
 const PROTOCOL_PORTS = {
   http: 80,
@@ -77,11 +91,17 @@ const curlVersionMatch = CURL_OUTPUT.match(/curl\s+(\d+.\d+.\d+)/);
 
 const CURL_VERSION = curlVersionMatch ? curlVersionMatch[1] : '0.0.0';
 
+const DNS_CACHE_MAP = new LocalCache<string>({
+  maxItems: 512,
+  noInterval: true,
+});
+
 export {
   CURL,
-  CIPHERS,
   PROTOCOL_PORTS,
   DEFAULT_DNS_SERVERS,
   CURL_VERSION,
   CURL_OUTPUT,
+  TLS,
+  DNS_CACHE_MAP,
 };

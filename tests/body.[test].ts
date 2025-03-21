@@ -12,7 +12,7 @@ test('body', async () => {
     'https://httpbin.org/anything',
     {
       body: formData,
-    }
+    },
   );
 
   const stream = new ReadableStream({
@@ -31,7 +31,7 @@ test('body', async () => {
       headers: {
         'content-type': 'text/plain;charset=utf-8',
       },
-    }
+    },
   );
 
   const params = new URLSearchParams({ foo: 'bar', baz: 'qux' });
@@ -41,11 +41,11 @@ test('body', async () => {
     {
       method: 'POST',
       body: params,
-    }
+    },
   );
 
   expect(JSON.stringify(test_params.response.form)).toBe(
-    JSON.stringify({ baz: 'qux', foo: 'bar' })
+    JSON.stringify({ baz: 'qux', foo: 'bar' }),
   ); // httpbin returns form in incorrect order for some reason
 
   expect(test_stream.response.data).toBe('Hello, world!');

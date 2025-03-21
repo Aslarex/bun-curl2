@@ -44,19 +44,19 @@ export function hasJsonStructure(i: string | object): boolean {
  */
 export function determineContentType(body: string): string {
   if (hasJsonStructure(body)) {
-    return 'application/json;charset=UTF-8';
+    return 'application/json';
   }
 
   // Fast pre-check: if no '=' exists, it's unlikely to be URL-encoded.
-  if (body.indexOf('=') === -1) return 'text/plain;charset=UTF-8';
+  if (body.indexOf('=') === -1) return 'text/plain';
 
   // Manually check that each ampersand-separated part contains an '='.
   const pairs = body.split('&');
   for (let i = 0, len = pairs.length; i < len; i++) {
     // If any pair does not include '=', it's not properly URL-encoded.
-    if (pairs[i].indexOf('=') === -1) return 'text/plain;charset=UTF-8';
+    if (pairs[i].indexOf('=') === -1) return 'text/plain';
   }
-  return 'application/x-www-form-urlencoded;charset=UTF-8';
+  return 'application/x-www-form-urlencoded';
 }
 
 export function md5(str: string) {

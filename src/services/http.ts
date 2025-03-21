@@ -1,25 +1,22 @@
 import type {
   CacheKeys,
   GlobalInit,
-  RedisServer,
   RequestInit,
   ResponseInit,
+  UsableCache,
 } from '../types';
 import BuildCommand from './command';
 import { BuildResponse, ProcessResponse } from './response';
 import { extractFinalUrl, hasJsonStructure, md5 } from '../models/utils';
-import { LocalCache } from './local_cache';
+import { LocalCache } from './cacheStore';
 import CustomHeaders from '../models/headers';
 
 export default async function Http<T = any>(
   url: string,
   options: RequestInit<T> = {},
   init: GlobalInit & {
-    cache?: {
-      server: RedisServer | LocalCache<string>;
-      defaultExpiration?: number;
-    };
-  } = {}
+    cache?: UsableCache;
+  } = {},
 ): Promise<ResponseInit<T>> {
   const URLObject = new URL(url);
 
@@ -61,7 +58,7 @@ export default async function Http<T = any>(
         let value = e === 'url' ? url : options[e];
         if (value instanceof CustomHeaders || value instanceof Headers) {
           let a = [] as string[];
-          for (const [k, v] of value as unknown as Iterable<[string, string]>) {
+          for (const [k, v] of value) {
             a.push(k + v);
           }
           value = a;
@@ -83,7 +80,7 @@ export default async function Http<T = any>(
           getCachedRes,
           ts,
           options.parseJSON,
-          true
+          true,
         );
         const builtResponse = BuildResponse<T>(response, options, init);
         return options.transformResponse
@@ -92,9 +89,8 @@ export default async function Http<T = any>(
       } catch (e) {
         console.warn(
           `[BunCurl2] - Processing response from cache has failed`,
-          e
+          e,
         );
-        // If processing cached response fails, continue to execute the command.
       }
     }
   }
@@ -137,10 +133,11 @@ export default async function Http<T = any>(
   try {
     stdout = await Promise.race([stdoutPromise, abortPromise]);
   } catch (error) {
-    throw error;
-  } finally {
     await proc.exited;
+    throw error;
   }
+
+  await proc.exited;
 
   const stderrData = await stderrPromise;
 
