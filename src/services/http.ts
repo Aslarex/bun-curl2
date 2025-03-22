@@ -143,7 +143,6 @@ export default async function Http<T = any>(
 
   // Check the exit code for errors.
   if (proc.exitCode !== 0) {
-    console.log(cmd);
     const errorMessage = `[BunCurl2] - ${stderrData.trim().replace(/curl:\s*\(\d+\)\s*/, '')}`;
     throw Object.assign(new Error(errorMessage), {
       code: 'ERR_CURL_FAILED',
