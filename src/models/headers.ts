@@ -1,4 +1,5 @@
 import { types } from 'node:util';
+import { RequestInit } from '../types';
 
 /**
  * Validate header name using Node’s built‐in validator if available,
@@ -52,11 +53,11 @@ export type HeadersInit =
  * Node.js returns “rich” iterators (with extra methods like map/filter),
  * we cast our generator results to the proper return types.
  */
-export default class Headers extends URLSearchParams {
+export default class CustomHeaders extends URLSearchParams {
   constructor(init?: HeadersInit) {
     let result: string[][] = [];
 
-    if (init instanceof Headers) {
+    if (init instanceof CustomHeaders) {
       // When initializing from another Headers instance,
       // use its raw() method which already returns lower-cased keys.
       const raw = init.raw();
@@ -191,7 +192,7 @@ export default class Headers extends URLSearchParams {
           }
         }
       },
-    }) as Headers;
+    });
   }
 
   get [Symbol.toStringTag](): string {
@@ -308,7 +309,7 @@ Object.defineProperties(
  * Utility: Create a Headers instance from raw header arrays (e.g. from
  * http.IncomingMessage.rawHeaders).
  */
-export function fromRawHeaders(headers: string[] = []): Headers {
+export function fromRawHeaders(headers: string[] = []): CustomHeaders {
   const pairs = headers
     .reduce((result: string[][], _value, index, array) => {
       if (index % 2 === 0) {
@@ -325,5 +326,148 @@ export function fromRawHeaders(headers: string[] = []): Headers {
         return false;
       }
     });
-  return new Headers(pairs);
+  return new CustomHeaders(pairs);
+}
+
+const prioritizedOrder = new Map<string, number>(
+  [
+    'accept',
+    'accept-charset',
+    'accept-encoding',
+    'accept-language',
+    'accept-ranges',
+    'access-control-allow-credentials',
+    'access-control-allow-headers',
+    'access-control-allow-methods',
+    'access-control-allow-origin',
+    'access-control-expose-headers',
+    'access-control-max-age',
+    'access-control-request-headers',
+    'access-control-request-method',
+    'age',
+    'authorization',
+    'cache-control',
+    'connection',
+    'content-disposition',
+    'content-encoding',
+    'content-language',
+    'content-length',
+    'content-location',
+    'content-range',
+    'content-security-policy',
+    'content-security-policy-report-only',
+    'content-type',
+    'cookie',
+    'cookie2',
+    'cross-origin-embedder-policy',
+    'cross-origin-embedder-policy-report-only',
+    'cross-origin-opener-policy',
+    'cross-origin-opener-policy-report-only',
+    'cross-origin-resource-policy',
+    'dnt',
+    'date',
+    'default-style',
+    'etag',
+    'expect',
+    'expires',
+    'host',
+    'icy-metaint',
+    'icy-metadata',
+    'if-match',
+    'if-modified-since',
+    'if-none-match',
+    'if-range',
+    'if-unmodified-since',
+    'keep-alive',
+    'last-event-id',
+    'last-modified',
+    'link',
+    'location',
+    'origin',
+    'ping-from',
+    'ping-to',
+    'pragma',
+    'proxy-authorization',
+    'purpose',
+    'range',
+    'referer',
+    'referrer-policy',
+    'refresh',
+    'report-to',
+    'sec-fetch-dest',
+    'sec-fetch-mode',
+    'sec-websocket-accept',
+    'sec-websocket-extensions',
+    'sec-websocket-key',
+    'sec-websocket-protocol',
+    'sec-websocket-version',
+    'server-timing',
+    'service-worker',
+    'service-worker-allowed',
+    'service-worker-navigation-preload',
+    'set-cookie',
+    'set-cookie2',
+    'sourcemap',
+    'strict-transport-security',
+    'te',
+    'timing-allow-origin',
+    'trailer',
+    'transfer-encoding',
+    'upgrade',
+    'upgrade-insecure-requests',
+    'user-agent',
+    'vary',
+    'via',
+    'x-content-type-options',
+    'x-dns-prefetch-control',
+    'x-frame-options',
+    'x-sourcemap',
+    'x-temp-tablet',
+    'x-xss-protection',
+  ].map((header, index) => [header, index]),
+);
+
+export function orderHeaders(
+  inputHeaders: Exclude<RequestInit['headers'], undefined>,
+): [string, string][] {
+  let headerEntries: [string, string][] = [];
+
+  if (
+    inputHeaders instanceof Headers ||
+    inputHeaders instanceof CustomHeaders
+  ) {
+    inputHeaders.forEach((value, key) => {
+      headerEntries.push([key.toLowerCase(), value]);
+    });
+  } else {
+    for (const [key, value] of Object.entries(inputHeaders)) {
+      headerEntries.push([key.toLowerCase(), String(value)]);
+    }
+  }
+
+  // Sort headers using the Map for faster lookup
+  headerEntries.sort((a, b) => {
+    const keyA = a[0];
+    const keyB = b[0];
+
+    const indexA = prioritizedOrder.get(keyA);
+    const indexB = prioritizedOrder.get(keyB);
+
+    // Both keys are in the prioritized order list.
+    if (indexA !== undefined && indexB !== undefined) {
+      return indexA - indexB;
+    }
+    // Only keyA is in the list.
+    if (indexA !== undefined) {
+      return -1;
+    }
+    // Only keyB is in the list.
+    if (indexB !== undefined) {
+      return 1;
+    }
+    // Neither key is in the list; sort alphabetically.
+    return keyA.localeCompare(keyB);
+  });
+
+  return headerEntries;
 }

@@ -18,6 +18,7 @@ import {
 } from '../models/utils';
 import { Buffer } from 'buffer';
 import { dns } from 'bun';
+import { orderHeaders } from '../models/headers';
 
 const SUPPORTS = {
   HTTP2: CURL_OUTPUT.indexOf('http2') !== -1,
@@ -228,7 +229,7 @@ export default async function BuildCommand<T>(
     }
     if (resolveIP && isValidIPv4(resolveIP)) {
       if (options.dns?.cache !== false && !cachedIP) {
-        DNS_CACHE_MAP.set(url.host, resolveIP, options.dns?.cache ?? 300);
+        DNS_CACHE_MAP.set(url.host, resolveIP, options.dns?.cache ?? 15);
       }
       const port = getDefaultPort(url.protocol);
       command.push(CURL.DNS_RESOLVE, `${url.host}:${port}:${resolveIP}`);
@@ -239,6 +240,7 @@ export default async function BuildCommand<T>(
   if (init.tcp?.fastOpen && SUPPORTS.TCP_FASTOPEN)
     command.push(CURL.TCP_FASTOPEN);
   if (init.tcp?.noDelay && SUPPORTS.TCP_NODELAY) command.push(CURL.TCP_NODELAY);
+
   if (options.proxy) command.push(CURL.PROXY, formatProxyString(options.proxy));
 
   // ── Append Follow Redirect & HTTP Keep-Alive Options ──
@@ -271,36 +273,21 @@ export default async function BuildCommand<T>(
     command.push(CURL.DATA_RAW, bodyData);
   }
 
-  // ── Append Headers (Combined Loop) ──
-  // We combine header extraction and command push in one loop.
-  // The user-agent header is deliberately skipped so it can be added via CURL.USER_AGENT.
-  let headerKeys = new Set<string>(),
+  // ── Append Headers ──
+  let contentTypeProvided = false,
     userAgent: string = init.defaultAgent || `Bun/${Bun.version}`;
   if (options.headers) {
-    if (options.headers instanceof Headers) {
-      for (const [key, value] of options.headers.entries()) {
-        const lowerKey = key.toLowerCase();
-        headerKeys.add(lowerKey);
-        if (lowerKey !== 'user-agent') {
-          command.push(CURL.HEADER, `${key}: ${value}`);
-        } else userAgent = value;
-      }
-    } else {
-      for (const [key, value] of Object.entries(options.headers)) {
-        if (value !== undefined) {
-          const lowerKey = key.toLowerCase();
-          headerKeys.add(lowerKey);
-          if (lowerKey !== 'user-agent') {
-            command.push(CURL.HEADER, `${key}: ${value}`);
-          } else userAgent = value;
-        }
-      }
+    const orderedHeaders = orderHeaders(options.headers);
+    for (const [key, value] of orderedHeaders) {
+      if (key == 'content-type') contentTypeProvided = true;
+      if (key == 'user-agent') userAgent = value;
+      else command.push(CURL.HEADER, `${key}: ${value}`);
     }
   }
   // Always add user-agent using -A flag.
   command.push(CURL.USER_AGENT, userAgent);
 
-  if (prepared && prepared.type && !headerKeys.has('content-type')) {
+  if (prepared && prepared.type && !contentTypeProvided) {
     command.push(CURL.HEADER, `content-type: ${prepared.type}`);
   }
 
@@ -308,6 +295,7 @@ export default async function BuildCommand<T>(
   method === 'HEAD'
     ? command.push(CURL.HEAD)
     : command.push(CURL.METHOD, method);
+
   command.push(
     urlString.replace(/[\[\]]/g, char => (char === '[' ? '%5B' : '%5D')),
   );
