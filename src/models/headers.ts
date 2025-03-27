@@ -430,44 +430,33 @@ const prioritizedOrder = new Map<string, number>(
 export function orderHeaders(
   inputHeaders: Exclude<RequestInit['headers'], undefined>,
 ): [string, string][] {
-  let headerEntries: [string, string][] = [];
+  let headerEntries: { original: string, lower: string, value: string }[] = [];
 
-  if (
-    inputHeaders instanceof Headers ||
-    inputHeaders instanceof CustomHeaders
-  ) {
+  if (inputHeaders instanceof Headers || inputHeaders instanceof CustomHeaders) {
     inputHeaders.forEach((value, key) => {
-      headerEntries.push([key.toLowerCase(), value]);
+      headerEntries.push({ original: key, lower: key.toLowerCase(), value });
     });
   } else {
-    for (const [key, value] of Object.entries(inputHeaders)) {
-      headerEntries.push([key.toLowerCase(), String(value)]);
+    for (const [key, value] of (Array.isArray(inputHeaders) ? inputHeaders : Object.entries(inputHeaders))) {
+      headerEntries.push({ original: key, lower: key.toLowerCase(), value: String(value) });
     }
   }
-
-  // Sort headers using the Map for faster lookup
+  
   headerEntries.sort((a, b) => {
-    const keyA = a[0];
-    const keyB = b[0];
-
-    const indexA = prioritizedOrder.get(keyA);
-    const indexB = prioritizedOrder.get(keyB);
-
-    // Both keys are in the prioritized order list.
+    const indexA = prioritizedOrder.get(a.lower);
+    const indexB = prioritizedOrder.get(b.lower);
+  
     if (indexA !== undefined && indexB !== undefined) {
       return indexA - indexB;
     }
-    // Only keyA is in the list.
     if (indexA !== undefined) {
       return -1;
     }
-    // Only keyB is in the list.
     if (indexB !== undefined) {
       return 1;
     }
-    // Neither key is in the list; sort alphabetically.
-    return keyA.localeCompare(keyB);
+    return a.lower.localeCompare(b.lower);
   });
-
-  return headerEntries;
+  
+  return headerEntries.map(entry => [entry.original, entry.value]);  
 }

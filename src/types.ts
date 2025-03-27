@@ -318,7 +318,7 @@ interface BaseRequestInit {
   /**
    * The request headers.
    */
-  headers?: Record<string, string | number> | Headers | CustomHeaders;
+  headers?: Record<string, string | number> | Headers | CustomHeaders | [string, string | number][];
 
   /**
    * The HTTP method to be used for the request (e.g., GET, POST).
