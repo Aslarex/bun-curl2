@@ -1,7 +1,6 @@
 import type { GlobalInit, RequestInit } from '../types';
 import {
   CURL,
-  DEFAULT_DNS_SERVERS,
   CURL_VERSION,
   CURL_OUTPUT,
   TLS,
@@ -159,7 +158,6 @@ export default async function BuildCommand<T>(
   const tls_insecure = options.tls?.insecure ?? false;
   const tls_versions = options.tls?.versions ?? [TLS.Version12, TLS.Version13];
   const httpVersion = options.http?.version ?? (SUPPORTS.HTTP2 ? 2.0 : 1.1);
-  const dnsServers = options.dns?.servers ?? DEFAULT_DNS_SERVERS;
   const method = options.method!.toUpperCase();
 
   // ── Build Base Command ──
@@ -213,23 +211,25 @@ export default async function BuildCommand<T>(
 
   // ── Append Compression, DNS Servers & DNS Resolve ──
   if (compress && method !== 'HEAD') command.push(CURL.COMPRESSED);
-  if (SUPPORTS.DNS_SERVERS)
-    command.push(CURL.DNS_SERVERS, dnsServers.join(','));
+  if (options.dns?.servers && SUPPORTS.DNS_SERVERS)
+    command.push(CURL.DNS_SERVERS, options.dns.servers.join(','));
 
   if (SUPPORTS.DNS_RESOLVE && containsAlphabet(url.host)) {
-    let resolveIP: string | null = null;
+    let resolveIP: string | null = options.dns?.resolve || null;
     let cachedIP = DNS_CACHE_MAP.get(url.host) || undefined;
-    if ((options.dns?.resolve ?? options.dns?.cache !== false) && cachedIP) {
-      resolveIP = cachedIP;
-    } else {
-      try {
-        const lookup = await dns.lookup(url.host, { family: 4 });
-        if (lookup.length) resolveIP = lookup[0].address;
-      } catch {}
+    if (!options.dns?.resolve) {
+      if (options.dns?.cache && cachedIP) {
+        resolveIP = cachedIP;
+      } else {
+        try {
+          const lookup = await dns.lookup(url.host, { family: 4 });
+          if (lookup.length) resolveIP = lookup[0].address;
+        } catch {}
+      }
     }
     if (resolveIP && isValidIPv4(resolveIP)) {
-      if (options.dns?.cache !== false && !cachedIP) {
-        DNS_CACHE_MAP.set(url.host, resolveIP, options.dns?.cache ?? 15);
+      if (!options.dns?.resolve && options.dns?.cache && !cachedIP) {
+        DNS_CACHE_MAP.set(url.host, resolveIP, typeof options.dns.cache === "number" ? options.dns.cache : 30);
       }
       const port = getDefaultPort(url.protocol);
       command.push(CURL.DNS_RESOLVE, `${url.host}:${port}:${resolveIP}`);

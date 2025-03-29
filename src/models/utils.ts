@@ -32,7 +32,7 @@ export function hasJsonStructure(i: string | object): boolean {
   return (
     res !== null &&
     typeof res === 'object' &&
-    (Array.isArray(res) || res.constructor === Object)
+    (res.constructor === Object || Array.isArray(res))
   );
 }
 

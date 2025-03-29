@@ -56,7 +56,7 @@ export default async function Http<T = any>(
           : options.cache.keys;
       const keys = mapKeys.map(e => {
         let value = e === 'url' ? url : options[e];
-        if (value instanceof CustomHeaders || value instanceof Headers) {
+        if (value instanceof Headers) {
           let a = [] as string[];
           for (const [k, v] of value) {
             a.push(k + v);

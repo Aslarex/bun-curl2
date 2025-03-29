@@ -58,24 +58,13 @@ interface BaseCache {
   defaultExpiration?: number;
 }
 
-/**
- * Defines the different configurations available for caching.
- *
- * It supports one of the following three configurations:
- * - A Redis server based cache.
- * - A cache using Redis client options.
- * - A cache with neither server nor options defined with a mode: "redis".
- * - A default mode cache
- */
-type CacheType =
-  | (BaseCache & { server: RedisServer; options?: never; mode?: 'redis' })
-  | (BaseCache & {
-      options: RedisClientOptions;
-      server?: never;
-      mode?: 'redis';
-    })
-  | (BaseCache & { server?: never; options?: never; mode?: 'redis' })
-  | (BaseCache & { mode?: 'local' });
+type RedisCache = BaseCache & { mode?: 'redis' } & (
+  | { server: RedisServer; options?: never }
+  | { options: RedisClientOptions; server?: never }
+  | { server?: never; options?: never }
+);
+
+type CacheType = RedisCache | BaseCache & { mode?: 'local' };
 
 type UsableCache = {
   server: RedisServer | LocalCache<string>;
@@ -183,6 +172,7 @@ interface Connection {
      * The keep-alive setting for the connection (HTTP/1.1).
      *
      * When set to a number, it represents the time in seconds to keep the connection alive.
+     * 
      * When set to a boolean, it indicates whether to enable (true) or disable (false) the keep-alive feature.
      */
     keepAlive?: number | boolean;
@@ -277,20 +267,25 @@ interface ExtraOptions<T> {
     /**
      * @description
      * An array of DNS server IP addresses to use for domain resolution.
-     * Each server should be provided as a string (e.g., "8.8.8.8"). If omitted, the **Google**'s DNS servers are used.
+     * 
+     * Each server should be provided as a string (e.g., "8.8.8.8").
+     * 
      * @requires cURL build with **c-ares**
      */
     servers?: string[];
     /**
      * @description
      * TTL in seconds for DNS should be cached for current hostname.
+     * 
      * Provide `false` if you want to disable DNS caching for following hostname.
-     * @default 300
+     * 
+     * If the value is `true`, cache will last for 30 seconds.
+     * @default false
      */
-    cache?: number | false;
+    cache?: number | boolean;
     /**
      * @description
-     * Directly connect to the target with following IP to bypass DNS lookup
+     * Directly connect to the target with following IP to skip DNS lookup
      * @format `ip`
      */
     resolve?: string;
@@ -318,7 +313,7 @@ interface BaseRequestInit {
   /**
    * The request headers.
    */
-  headers?: Record<string, string | number> | Headers | CustomHeaders | [string, string | number][];
+  headers?: Record<string, string | number> | Headers | [string, string | number][];
 
   /**
    * The HTTP method to be used for the request (e.g., GET, POST).

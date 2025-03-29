@@ -84,8 +84,6 @@ const PROTOCOL_PORTS = {
   dict: 2628,
 } as Record<string, number>;
 
-const DEFAULT_DNS_SERVERS = ['8.8.8.8', '8.8.4.4'];
-
 const CURL_OUTPUT = (await $`curl --version`.quiet().text()).toLowerCase();
 
 const curlVersionMatch = CURL_OUTPUT.match(/curl\s+(\d+.\d+.\d+)/);
@@ -93,14 +91,13 @@ const curlVersionMatch = CURL_OUTPUT.match(/curl\s+(\d+.\d+.\d+)/);
 const CURL_VERSION = curlVersionMatch ? curlVersionMatch[1] : '0.0.0';
 
 const DNS_CACHE_MAP = new LocalCache<string>({
-  maxItems: 512,
+  maxItems: 255,
   noInterval: true,
 });
 
 export {
   CURL,
   PROTOCOL_PORTS,
-  DEFAULT_DNS_SERVERS,
   CURL_VERSION,
   CURL_OUTPUT,
   TLS,

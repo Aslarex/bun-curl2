@@ -27,8 +27,7 @@ BunCurl2 is a **super-fast, fetch-like HTTP client** for [Bun](https://bun.sh)! 
 ## 📜 Changelog
 
 > **What's New?**  
-> Stay informed about updates and improvements by checking our **[Changelog](./CHANGELOG.md)**.  
-> _Your go-to resource for release notes and feature highlights!_ 🔥
+> Stay informed about updates and improvements by checking **[Changelog](./CHANGELOG.md)**.  
 
 ---
 
@@ -114,42 +113,12 @@ console.log('Response:', req.response);
 
 ---
 
-## 🔧 Advanced Options
-
-- **Proxy Support:**  
-  Formats supported:
-  - `ip:port`
-  - `ip:port:user:pass`
-  - `user:pass@ip:port`
-- **Custom Headers & Body:**  
-  Supports sending strings, objects, Blobs, BufferSources, FormData, URLSearchParams, and ReadableStreams.  
-  Automatically detects `Content-Type`, but setting manually is recommended.
-
-- **TLS & Cipher Configuration:**  
-  Customize TLS versions and cipher suites for enhanced security.
-
-- **Caching Modes:**  
-  Redis caching is recommended for persistent caching needs, while local, memory-based caching (via Map) is ideal for short-term, in-process storage.
-
----
-
-## 🔍 Under the Hood
-
-- **Bun Child Processes + cURL:**  
-  Combines the strengths of Bun and cURL for top-tier performance.
-- **Fully Typed Interfaces:**  
-  Comprehensive TypeScript typings improve development experience.
-- **Robust Caching:**  
-  Efficient caching solutions using Redis or JavaScript's built-in Map.
-
----
-
 ## 🤝 Contributing
 
-As this is a solo-maintained project, your feedback, issues, or pull requests are warmly welcomed! Please keep contributions friendly and respectful.
+Your feedback, issues, or pull requests are welcomed!
 
 ---
 
 ## 🏳️ License
 
-This project is proudly licensed under the **[WTFPL](./LICENSE)**.
+This project is licensed under the **[WTFPL](./LICENSE)**.
