@@ -3,12 +3,13 @@ import { expect, test } from 'bun:test';
 
 const Client = new BunCurl2({
   cache: {
-    mode: 'local', // test out the 0.0.21 local caching mode
+    mode: 'redis',
+    useRedisPackage: false,
   },
 });
 
 test('cache', async () => {
-  await Client.initializeCache();
+  await Client.connect();
 
   const ShouldNotCache = await Client.get('https://www.example.com', {
     cache: {
@@ -45,7 +46,7 @@ test('cache', async () => {
   });
 
   // required if we want the process to exit after finish
-  await Client.disconnectCache();
+  await Client.destroy();
 
   expect(ShouldNotCache.cached).toBe(false);
 

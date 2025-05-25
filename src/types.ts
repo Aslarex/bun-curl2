@@ -1,8 +1,8 @@
 import type { RedisClientOptions } from 'redis';
 import CustomHeaders from './models/headers';
 import { TLS } from './models/constants';
-import { LocalCache } from './services/cacheStore';
-
+import { LocalCache } from './services/cache';
+import { RedisClient, RedisOptions } from 'bun';
 /**
  * Represents a connection to a Redis server and provides basic operations.
  */
@@ -38,7 +38,13 @@ interface RedisServer {
   set: (
     key: string,
     value: string,
-    options: { EX?: number; NX?: true },
+    options: {
+      expiration?: {
+        type: 'EX' | 'PX' | 'EXAT' | 'PXAT';
+        value: number;
+      };
+      condition?: 'NX' | 'XX';
+    },
   ) => Promise<string | null>;
 
   /**
@@ -58,16 +64,36 @@ interface BaseCache {
   defaultExpiration?: number;
 }
 
-type RedisCache = BaseCache & { mode?: 'redis' } & (
-  | { server: RedisServer; options?: never }
-  | { options: RedisClientOptions; server?: never }
-  | { server?: never; options?: never }
-);
+type RedisCache =
+  | (BaseCache & {
+      mode?: 'redis';
+      server: RedisServer | RedisClient;
+      options?: never;
+      useRedisPackage?: never;
+    })
+  | (BaseCache & {
+      mode?: 'redis';
+      server?: never;
+      useRedisPackage: true;
+      options?: RedisClientOptions;
+    })
+  | (BaseCache & {
+      mode?: 'redis';
+      server?: never;
+      useRedisPackage: false;
+      options?: RedisOptions & { url?: string };
+    })
+  | (BaseCache & {
+      mode?: 'redis';
+      server?: never;
+      useRedisPackage?: never;
+      options?: RedisOptions & { url?: string };
+    });
 
-type CacheType = RedisCache | BaseCache & { mode?: 'local' };
+type CacheType = RedisCache | (BaseCache & { mode?: 'local' | 'client' });
 
-type UsableCache = {
-  server: RedisServer | LocalCache<string>;
+type CacheInstance = {
+  server: RedisServer | RedisClient | LocalCache<string>;
   defaultExpiration?: number;
 };
 
@@ -81,7 +107,7 @@ type GlobalInit = {
    * @param args - The initial RequestInit object.
    * @returns A transformed RequestInit object.
    */
-  transfomRequest?: (args: RequestInitWithURL) => RequestInit;
+  transformRequest?: (args: RequestInitWithURL) => RequestInit;
 
   /**
    * Enables response compression if set to true.
@@ -95,7 +121,7 @@ type GlobalInit = {
   defaultAgent?: string;
 
   /**
-   * Maximum allowed size of the request body in megabytes.
+   * Maximum allowed size of the response body in megabytes.
    */
   maxBodySize?: number;
 
@@ -125,6 +151,16 @@ type GlobalInit = {
      */
     noDelay?: boolean;
   };
+
+  /**
+   * @description
+   * Maximum amount of allowed concurrent requests
+   *
+   * Cached requests are skipped
+   *
+   * @default 250
+   */
+  maxConcurrentRequests?: number;
 };
 
 /**
@@ -172,7 +208,7 @@ interface Connection {
      * The keep-alive setting for the connection (HTTP/1.1).
      *
      * When set to a number, it represents the time in seconds to keep the connection alive.
-     * 
+     *
      * When set to a boolean, it indicates whether to enable (true) or disable (false) the keep-alive feature.
      */
     keepAlive?: number | boolean;
@@ -183,12 +219,12 @@ interface Connection {
   };
 
   /**
-   * Connection timeout duration in milliseconds.
+   * Connection timeout duration in seconds.
    */
   connectionTimeout?: number;
 
   /**
-   * Maximum time in milliseconds allowed for the entire request/response cycle.
+   * Maximum time in seconds allowed for the entire request/response cycle.
    */
   maxTime?: number;
 }
@@ -267,18 +303,18 @@ interface ExtraOptions<T> {
     /**
      * @description
      * An array of DNS server IP addresses to use for domain resolution.
-     * 
+     *
      * Each server should be provided as a string (e.g., "8.8.8.8").
-     * 
+     *
      * @requires cURL build with **c-ares**
      */
     servers?: string[];
     /**
      * @description
      * TTL in seconds for DNS should be cached for current hostname.
-     * 
+     *
      * Provide `false` if you want to disable DNS caching for following hostname.
-     * 
+     *
      * If the value is `true`, cache will last for 30 seconds.
      * @default false
      */
@@ -290,6 +326,14 @@ interface ExtraOptions<T> {
      */
     resolve?: string;
   };
+
+  /**
+   * @description
+   * Re-serialize headers in the Canonical HTTP/1.1 Header Order (RFC 2616 §14).
+   *
+   * @default true
+   */
+  sortHeaders?: boolean;
 }
 
 type BodyInit =
@@ -313,7 +357,10 @@ interface BaseRequestInit {
   /**
    * The request headers.
    */
-  headers?: Record<string, string | number> | Headers | [string, string | number][];
+  headers?:
+    | Record<string, string | number>
+    | Headers
+    | [string, string | number][];
 
   /**
    * The HTTP method to be used for the request (e.g., GET, POST).
@@ -472,10 +519,11 @@ export type {
   RequestInit,
   ResponseInit,
   CacheType,
-  UsableCache,
+  CacheInstance,
   GlobalInit,
   BaseResponseInit,
   RedisServer,
   BaseRequestInit,
   BaseCache,
+  RedisCache,
 };

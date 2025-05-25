@@ -1,3 +1,6 @@
+if (!globalThis.Bun) {
+  throw new Error('Bun (https://bun.sh) is required to run this package');
+}
 if (!('BUN_CONFIG_DNS_TIME_TO_LIVE_SECONDS' in process.env)) {
   process.env.BUN_CONFIG_DNS_TIME_TO_LIVE_SECONDS = '0';
 }
@@ -13,12 +16,14 @@ import type {
   BaseRequestInit,
   BaseCache,
   CacheKeys,
-  UsableCache,
+  CacheInstance,
 } from './types';
 import Headers from './models/headers';
-import { LocalCache } from './services/cacheStore';
+import { LocalCache } from './services/cache';
 import { ResponseWrapper } from './services/response';
 import { DNS_CACHE_MAP, TLS } from './models/constants';
+import { compareVersions } from './models/utils';
+import { RedisOptions } from 'bun';
 
 export type {
   RequestInit,
@@ -47,7 +52,7 @@ export {
  * BunCurl2 provides a high-level HTTP client with caching support.
  *
  * @example
- * const bunCurl = new BunCurl2({ cache: { mode: 'redis', options: { host: 'localhost' } } });
+ * const bunCurl = new BunCurl2({ cache: { mode: 'local' } });
  * await bunCurl.initializeCache();
  * const response = await bunCurl.get('https://example.com');
  */
@@ -57,7 +62,7 @@ export class BunCurl2 {
    *
    * @private
    */
-  private cache?: UsableCache;
+  private cache?: CacheInstance;
 
   /**
    * Creates an instance of BunCurl2.
@@ -67,60 +72,71 @@ export class BunCurl2 {
   constructor(private args: GlobalInit & { cache?: CacheType } = {}) {}
 
   /**
-   * *NOTE: this will be renamed to `BunCurl2.init` for future planned updates, its better to start using `BunCurl2.init` as of now.*
-   *
    * @description
-   * Initializes the cache based on the provided configuration.
-   *
-   * If no cache configuration is provided, returns false.
-   * Supports 'local' and 'redis' modes.
-   *
-   * @returns {Promise<boolean>} A promise that resolves to true if the cache was successfully initialized; false otherwise.
-   * @throws {Error} Throws an error with code 'ERR_CACHE_INITIALIZATION' if cache initialization fails.
+   * Prepare the cache server
    */
-  async initializeCache(): Promise<boolean> {
-    if (!this.args.cache) return false;
-    this.args.cache.mode = this.args.cache.mode ?? 'redis';
+  async connect() {
+    const { cache } = this.args;
+    if (!cache) return false;
+    cache.mode = cache.mode ?? 'redis';
+    this.cache = {
+      defaultExpiration: cache.defaultExpiration,
+      server: null!,
+    };
     try {
-      switch (this.args.cache.mode) {
+      switch (cache.mode) {
         case 'local':
-          this.cache = {
-            server: new LocalCache<string>(),
-            defaultExpiration: this.args.cache.defaultExpiration,
-          };
+        case 'client':
+          this.cache.server = new LocalCache<string>();
           break;
         case 'redis':
-          if (this.args.cache.server) {
-            this.cache = {
-              server: this.args.cache.server,
-              defaultExpiration: this.args.cache.defaultExpiration,
-            };
+          if (cache.server) {
+            this.cache.server = cache.server;
           } else {
-            const redis = await import('redis');
-            this.cache = {
-              server: redis.createClient(this.args.cache.options),
-              defaultExpiration: this.args.cache.defaultExpiration,
-            };
+            const isBunClientSupported =
+              compareVersions(Bun.version, '1.2.9') >= 0;
+            if (cache.useRedisPackage || !isBunClientSupported) {
+              if (!isBunClientSupported)
+                console.warn(
+                  '⚠️ [BunCurl2] - Detected Bun version does not supported redis client API implemented by them, fallbacking to redis package',
+                );
+              const { createClient } = await import('redis');
+              this.cache.server = createClient(
+                cache.useRedisPackage
+                  ? cache.options
+                  : { url: cache.options?.url },
+              );
+            } else {
+              const { RedisClient } = await import('bun');
+              this.cache.server = new RedisClient(
+                cache.options?.url,
+                Object.assign(cache.options ?? {}, {
+                  url: undefined,
+                }) as RedisOptions,
+              );
+            }
           }
-          const server = this.cache.server as RedisServer;
-          if (!server.isOpen) {
+          const server = this.cache.server;
+          if ('isOpen' in server && !server.isOpen) {
+            await server.connect();
+          } else if ('connected' in server && !server.connected) {
             await server.connect();
           }
           break;
         default:
           console.error(
-            `[BunCurl2] - Received invalid cache mode (${this.args.cache.mode})`,
+            `[BunCurl2] - Received invalid cache mode (${cache.mode})`,
           );
           return false;
       }
       return true;
     } catch (e) {
       const cacheInitializationError = new Error(
-        '[BunCurl2] - Initializing cache has failed',
+        '[BunCurl2] - Client initialization has failed',
       );
       Object.defineProperties(cacheInitializationError, {
         code: {
-          value: 'ERR_CACHE_INITIALIZATION',
+          value: 'ERR_CLIENT_INITIALIZATION',
         },
         cause: {
           value: e,
@@ -131,44 +147,29 @@ export class BunCurl2 {
   }
 
   /**
-   * @alias initializeCache
+   * @alias connect
    */
-  init = this.initializeCache;
+  init = this.connect;
 
   /**
-   * @alias initializeCache
-   */
-  connect = this.initializeCache;
-
-  /**
-   * NOTE: this will be renamed to `BunCurl2.destroy` for future planned updates, its better to start using `BunCurl2.destroy` as of now.
-   *
    * @description
-   * Disconnects the cache server.
-   *
-   * If the cache is a local cache, it calls its `end` method.
-   * If it's a Redis server, it calls its `disconnect` method.
-   *
-   * @returns {Promise<void>} A promise that resolves when the cache is disconnected.
+   * Destroys the `BunCurl2` client.
    */
-  async disconnectCache(): Promise<void> {
-    DNS_CACHE_MAP.stopCleanup(), DNS_CACHE_MAP.clear();
-    const server = this.cache?.server;
-    if (!server) return void 0;
-    return server instanceof LocalCache
-      ? (server.end(), void 0)
-      : server?.disconnect();
+  async destroy() {
+    DNS_CACHE_MAP.end();
+    if (!this.cache?.server) return;
+    const server = this.cache.server;
+    if (server instanceof LocalCache) {
+      server.end();
+    } else {
+      'disconnect' in server ? await server.disconnect() : server.close();
+    }
   }
 
   /**
-   * @alias disconnectCache
+   * @alias destroy
    */
-  destroy = this.disconnectCache;
-
-  /**
-   * @alias disconnectCache
-   */
-  disconnect = this.disconnectCache;
+  disconnect = this.destroy;
 
   /**
    * Internal method to perform an HTTP request.

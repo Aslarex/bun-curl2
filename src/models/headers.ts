@@ -9,7 +9,6 @@ export type HeadersInit =
   | Iterable<readonly [string, string | number | string[]]>
   | Iterable<Iterable<string>>;
 
-
 export default class CustomHeaders extends Headers {
   constructor(init?: HeadersInit) {
     // Start with an empty Headers instance.
@@ -22,13 +21,11 @@ export default class CustomHeaders extends Headers {
             this.append(name, value);
           }
         }
-      }
-      else if (init instanceof Headers) {
+      } else if (init instanceof Headers) {
         for (const [name, value] of init.entries()) {
           this.append(name, value);
         }
-      }
-      else if (typeof init === 'object') {
+      } else if (typeof init === 'object') {
         const iterator = (init as any)[Symbol.iterator];
         if (typeof iterator === 'function') {
           for (const pair of init as Iterable<any>) {
@@ -106,28 +103,33 @@ const prioritizedOrder = new Map<string, number>(
   ].map((header, index) => [header, index]),
 );
 
-
-export function orderHeaders(
+export function sortHeaders(
   inputHeaders: Exclude<RequestInit['headers'], undefined>,
 ): [string, string][] {
   let headerEntries: [string, string, string][];
-  
+
   if (inputHeaders instanceof Headers) {
-    headerEntries = Array.from(inputHeaders, ([key, value]) => [key, key.toLowerCase(), value]);
+    headerEntries = Array.from(inputHeaders, ([key, value]) => [
+      key,
+      key.toLowerCase(),
+      value,
+    ]);
   } else if (Array.isArray(inputHeaders)) {
     headerEntries = inputHeaders.map(
-      ([key, value]) => [key, key.toLowerCase(), String(value)] as [string, string, string]
+      ([key, value]) =>
+        [key, key.toLowerCase(), String(value)] as [string, string, string],
     );
   } else {
     headerEntries = Object.entries(inputHeaders).map(
-      ([key, value]) => [key, key.toLowerCase(), String(value)] as [string, string, string]
+      ([key, value]) =>
+        [key, key.toLowerCase(), String(value)] as [string, string, string],
     );
   }
-  
+
   headerEntries.sort((a, b) => {
     const indexA = prioritizedOrder.get(a[1]);
     const indexB = prioritizedOrder.get(b[1]);
-    
+
     if (indexA !== undefined && indexB !== undefined) {
       return indexA - indexB;
     }
@@ -139,6 +141,6 @@ export function orderHeaders(
     }
     return a[1].localeCompare(b[1]);
   });
-  
+
   return headerEntries.map(([original, , value]) => [original, value]);
 }

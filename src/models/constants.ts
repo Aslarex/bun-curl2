@@ -1,5 +1,5 @@
 import { $ } from 'bun';
-import { LocalCache } from '../services/cacheStore';
+import { LocalCache } from '../services/cache';
 
 // Define constants for CURL options.
 const CURL = {
@@ -60,6 +60,15 @@ const TLS = {
   Version13: 0x0304,
 } as const;
 
+const HTTP = {
+  /** HTTP 1.1 */
+  Version11: 1.1,
+  /** HTTP 2.0 */
+  Version20: 2.0,
+  /** HTTP 3.0 */
+  Version30: 3.0,
+} as const;
+
 const PROTOCOL_PORTS = {
   http: 80,
   https: 443,
@@ -101,5 +110,6 @@ export {
   CURL_VERSION,
   CURL_OUTPUT,
   TLS,
+  HTTP,
   DNS_CACHE_MAP,
 };

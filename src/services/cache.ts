@@ -1,6 +1,6 @@
 type CacheValue<T> = {
   value: T;
-  expiresAt: number; // expiration timestamp in milliseconds
+  expiresAt: number;
 };
 
 type Options = {
@@ -15,7 +15,6 @@ export class LocalCache<T = any> {
   constructor(private options?: Options) {
     this.data = new Map();
     if (!options?.noInterval) {
-      // Run cleanup every minute (60 * 1000 ms)
       this.cleanupInterval = setInterval(() => this.cleanup(), 60 * 1000);
     }
   }
@@ -76,7 +75,7 @@ export class LocalCache<T = any> {
    * Destroys interval & clears the cache entries
    */
   end(): void {
-    this.stopCleanup();
+    this.cleanupInterval && clearInterval(this.cleanupInterval);
     this.data.clear();
   }
 
@@ -90,12 +89,5 @@ export class LocalCache<T = any> {
         this.data.delete(key);
       }
     }
-  }
-
-  /**
-   * Stops the cleanup interval.
-   */
-  stopCleanup(): void {
-    clearInterval(this.cleanupInterval);
   }
 }

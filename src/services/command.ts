@@ -1,10 +1,13 @@
 import type { GlobalInit, RequestInit } from '../types';
+import { Buffer } from 'buffer';
+import { dns } from 'bun';
 import {
   CURL,
   CURL_VERSION,
   CURL_OUTPUT,
   TLS,
   DNS_CACHE_MAP,
+  HTTP,
 } from '../models/constants';
 import formatProxyString from '../models/proxy';
 import {
@@ -15,153 +18,178 @@ import {
   hasJsonStructure,
   isValidIPv4,
 } from '../models/utils';
-import { Buffer } from 'buffer';
-import { dns } from 'bun';
-import { orderHeaders } from '../models/headers';
+import { sortHeaders } from '../models/headers';
 
 const SUPPORTS = {
-  HTTP2: CURL_OUTPUT.indexOf('http2') !== -1,
-  DNS_SERVERS: CURL_OUTPUT.indexOf('c-ares') !== -1,
+  HTTP2: CURL_OUTPUT.includes('http2'),
+  DNS_SERVERS: CURL_OUTPUT.includes('c-ares'),
   DNS_RESOLVE: compareVersions(CURL_VERSION, '7.21.3') >= 0,
   TCP_FASTOPEN: compareVersions(CURL_VERSION, '7.49.0') >= 0,
   TCP_NODELAY: compareVersions(CURL_VERSION, '7.11.2') >= 0,
 };
 
-/**
- * Helper: Build a multipart/form-data payload from a FormData instance.
- * Returns a Buffer payload and the boundary string.
- */
-async function buildMultipartBody(
-  formData: FormData,
-): Promise<{ body: Buffer; boundary: string }> {
+async function buildMultipartBody(formData: FormData) {
   const boundary =
-    '----WebKitFormBoundary' + Math.random().toString(36).substring(2);
-  const parts: Buffer[] = [];
+    '----WebKitFormBoundary' + Math.random().toString(36).slice(2);
+  const parts: Uint8Array[] = [];
 
-  // Collect all entries from FormData.
-  const entries: [string, FormDataEntryValue][] = [];
-  formData.forEach((value, key) => {
-    entries.push([key, value]);
-  });
-
-  // Loop over the collected entries sequentially.
-  for (const [key, value] of entries) {
-    let headers = `--${boundary}\r\nContent-Disposition: form-data; name="${key}"`;
-    let contentBuffer: Buffer;
+  for (const [key, value] of Array.from<any>(formData.entries())) {
+    let header = `--${boundary}\r\nContent-Disposition: form-data; name="${key}"`;
+    let chunk: Uint8Array;
 
     if (value instanceof Blob) {
-      // For file fields, add filename and Content-Type.
-      const fileName = (value as File).name || 'file';
-      const fileType = (value as File).type || 'application/octet-stream';
-      headers += `; filename="${fileName}"\r\nContent-Type: ${fileType}\r\n\r\n`;
-      const arrayBuffer = await value.arrayBuffer();
-      contentBuffer = Buffer.from(arrayBuffer);
+      const file = value as unknown as File;
+      header += `; filename="${file.name || 'file'}"\r\nContent-Type: ${file.type || 'application/octet-stream'}\r\n\r\n`;
+      chunk = new Uint8Array(await file.arrayBuffer());
     } else {
-      // For normal fields.
-      headers += '\r\n\r\n';
-      contentBuffer = Buffer.from(String(value), 'utf-8');
+      header += '\r\n\r\n';
+      chunk = new TextEncoder().encode(String(value));
     }
 
-    parts.push(Buffer.from(headers, 'utf-8'));
-    parts.push(contentBuffer);
-    parts.push(Buffer.from('\r\n', 'utf-8'));
+    parts.push(
+      new TextEncoder().encode(header),
+      chunk,
+      new TextEncoder().encode('\r\n'),
+    );
   }
 
-  // Append the closing boundary.
-  parts.push(Buffer.from(`--${boundary}--\r\n`, 'utf-8'));
-
-  return { body: Buffer.concat(parts), boundary };
+  parts.push(new TextEncoder().encode(`--${boundary}--\r\n`));
+  return { body: Buffer.concat(parts.map((u) => Buffer.from(u))), boundary };
 }
 
-/**
- * Helper: Prepare the request body.
- * Converts various body types (string, object, URLSearchParams, FormData, Blob,
- * ReadableStream, or BufferSource) into either a string or Buffer and returns
- * any headers that need to be set.
- */
-async function prepareRequestBody(
-  body: any,
-): Promise<{ body: string | Buffer; type?: string }> {
-  // URLSearchParams: convert to URL-encoded string.
+async function prepareRequestBody(body: unknown) {
   if (body instanceof URLSearchParams) {
-    return {
-      body: body.toString(),
-      type: 'application/x-www-form-urlencoded',
-    };
+    return { body: body.toString(), type: 'application/x-www-form-urlencoded' };
   }
 
-  // FormData: build multipart/form-data.
   if (body instanceof FormData) {
-    const { body: multipartBody, boundary } = await buildMultipartBody(body);
-    return {
-      body: multipartBody,
-      type: `multipart/form-data; boundary=${boundary}`,
-    };
+    const { body: bd, boundary } = await buildMultipartBody(body);
+    return { body: bd, type: `multipart/form-data; boundary=${boundary}` };
   }
 
-  // Blob: convert to Buffer.
-  if (body instanceof Blob) {
-    const arrayBuffer = await body.arrayBuffer();
-    return { body: Buffer.from(arrayBuffer) };
+  if (
+    body instanceof Blob ||
+    body instanceof ArrayBuffer ||
+    ArrayBuffer.isView(body)
+  ) {
+    const arr =
+      body instanceof Blob ? await body.arrayBuffer() : (body as ArrayBuffer);
+    return { body: Buffer.from(arr) };
   }
 
-  // ReadableStream: read and concatenate all chunks.
   if (body instanceof ReadableStream) {
-    const chunks: Uint8Array[] = [];
     const reader = body.getReader();
-    let done = false;
-    while (!done) {
-      const { value, done: streamDone } = await reader.read();
+    const chunks: Uint8Array[] = [];
+    while (true) {
+      const { value, done } = await reader.read();
+      if (done) break;
       if (value) chunks.push(value);
-      done = streamDone;
     }
-    return { body: Buffer.concat(chunks) };
+    return { body: Buffer.concat(chunks.map((c) => Buffer.from(c))) };
   }
 
-  // BufferSource: ArrayBuffer or TypedArray.
-  if (body instanceof ArrayBuffer || ArrayBuffer.isView(body)) {
-    return { body: Buffer.from(body as ArrayBuffer) };
+  if (typeof body === 'object' && body !== null && hasJsonStructure(body)) {
+    return { body: JSON.stringify(body), type: 'application/json' };
   }
 
-  // Plain object: assume JSON.
-  if (typeof body === 'object' && hasJsonStructure(body)) {
-    return {
-      body: JSON.stringify(body),
-      type: 'application/json',
-    };
-  }
-
-  // Fallback: convert to string.
-  const strBody = String(body);
-  return { body: strBody, type: determineContentType(strBody) };
+  const str = String(body);
+  return { body: str, type: determineContentType(str) };
 }
 
-/**
- * Main BuildCommand function.
- * Constructs the curl command for Bun.spawn based on options.
- */
+const prepareHeaders = (
+  headers: RequestInit['headers'],
+  sort: boolean,
+): [string, string][] => {
+  if (!headers) return [];
+  if (sort) return sortHeaders(headers);
+  return headers instanceof Headers
+    ? Array.from(headers)
+    : Array.isArray(headers)
+      ? headers.map(([k, v]) => [k, String(v)])
+      : Object.entries(headers).map(([k, v]) => [k, String(v)]);
+};
+
+function buildTLSOptions(options: RequestInit<any>, cmd: string[]) {
+  const tlsVers = options.tls?.versions ?? [TLS.Version12, TLS.Version13];
+  const [low, high] = [Math.min(...tlsVers), Math.max(...tlsVers)];
+  const tlsMap: Record<number, { flag: string; str: string }> = {
+    769: { flag: CURL.TLSv1_0, str: '1.0' },
+    770: { flag: CURL.TLSv1_1, str: '1.1' },
+    771: { flag: CURL.TLSv1_2, str: '1.2' },
+    772: { flag: CURL.TLSv1_3, str: '1.3' },
+  };
+  if (options.tls?.insecure) cmd.push(CURL.INSECURE);
+  if (tlsMap[low]) cmd.push(tlsMap[low].flag);
+  if (tlsMap[high]) cmd.push(CURL.TLS_MAX, tlsMap[high].str);
+  if (options.tls?.ciphers) {
+    const { DEFAULT, TLS13 } = options.tls.ciphers;
+    if (DEFAULT)
+      cmd.push(
+        CURL.CIPHERS,
+        Array.isArray(DEFAULT) ? DEFAULT.join(':') : DEFAULT,
+      );
+    if (TLS13 && tlsVers.includes(772))
+      cmd.push(
+        CURL.TLS13_CIPHERS,
+        Array.isArray(TLS13) ? TLS13.join(':') : TLS13,
+      );
+  }
+}
+
+async function buildDNSOptions(
+  url: URL,
+  options: RequestInit<any>,
+  cmd: string[],
+) {
+  if (options.dns?.servers && SUPPORTS.DNS_SERVERS)
+    cmd.push(CURL.DNS_SERVERS, options.dns.servers.join(','));
+
+  if (SUPPORTS.DNS_RESOLVE && containsAlphabet(url.host)) {
+    let resolveIP = options.dns?.resolve;
+    const cached = DNS_CACHE_MAP.get(url.host);
+    if (!resolveIP) {
+      if (options.dns?.cache && cached) resolveIP = cached;
+      else {
+        try {
+          const [rec] = await dns.lookup(url.host, { family: 4 });
+          resolveIP = rec?.address;
+        } catch {}
+      }
+    }
+    if (resolveIP && isValidIPv4(resolveIP)) {
+      if (options.dns?.cache && !cached)
+        DNS_CACHE_MAP.set(
+          url.host,
+          resolveIP,
+          typeof options.dns.cache === 'number' ? options.dns.cache : 30,
+        );
+      cmd.push(
+        CURL.DNS_RESOLVE,
+        `${url.host}:${getDefaultPort(url.protocol)}:${resolveIP}`,
+      );
+    }
+  }
+}
+
 export default async function BuildCommand<T>(
   url: URL,
   options: RequestInit<T>,
   init: GlobalInit,
 ): Promise<string[]> {
-  // ── Transform Request & Set Defaults ──
-  const urlString = url.toString();
-  if (options.transformRequest) {
-    options = options.transformRequest({ url: urlString, ...options });
-  } else if (init.transfomRequest && options.transformRequest !== false) {
-    options = init.transfomRequest({ url: urlString, ...options });
-  }
-  const maxTime = options.maxTime ?? 10;
-  const connectionTimeout = options.connectionTimeout ?? 5;
-  const compress = options.compress!;
-  const tls_insecure = options.tls?.insecure ?? false;
-  const tls_versions = options.tls?.versions ?? [TLS.Version12, TLS.Version13];
-  const httpVersion = options.http?.version ?? (SUPPORTS.HTTP2 ? 2.0 : 1.1);
-  const method = options.method!.toUpperCase();
+  const urlStr = url.toString();
+  options = options.transformRequest
+    ? options.transformRequest({ url: urlStr, ...options })
+    : init.transformRequest && options.transformRequest !== false
+      ? init.transformRequest({ url: urlStr, ...options })
+      : options;
 
-  // ── Build Base Command ──
-  const command: string[] = [
+  const maxTime = options.maxTime ?? 10;
+  const connTimeout = options.connectionTimeout ?? 5;
+  const method = options.method!.toUpperCase();
+  const version =
+    options.http?.version ?? (SUPPORTS.HTTP2 ? HTTP.Version20 : HTTP.Version11);
+
+  const cmd = [
     CURL.BASE,
     CURL.INFO,
     CURL.SILENT,
@@ -169,136 +197,63 @@ export default async function BuildCommand<T>(
     CURL.WRITE_OUT,
     '\nFinal-Url:%{url_effective}',
     CURL.TIMEOUT,
-    maxTime.toString(),
+    String(maxTime),
     CURL.CONNECT_TIMEOUT,
-    connectionTimeout.toString(),
-    CURL.HTTP_VERSION[httpVersion],
+    String(connTimeout),
+    CURL.HTTP_VERSION[version],
   ];
 
-  // ── Append TLS & Cipher Settings ──
-  if (tls_insecure) command.push(CURL.INSECURE);
-  const tlsMap: Record<number, { flag: string; str: string }> = {
-    769: { flag: CURL.TLSv1_0, str: '1.0' },
-    770: { flag: CURL.TLSv1_1, str: '1.1' },
-    771: { flag: CURL.TLSv1_2, str: '1.2' },
-    772: { flag: CURL.TLSv1_3, str: '1.3' },
-  };
-  if (tls_versions.length) {
-    const lowest = Math.min(...tls_versions);
-    const highest = Math.max(...tls_versions);
-    if (tlsMap[lowest]) command.push(tlsMap[lowest].flag);
-    if (tlsMap[highest]) command.push(CURL.TLS_MAX, tlsMap[highest].str);
-  }
-  if (options.tls?.ciphers) {
-    const ciphers = options.tls.ciphers;
-    if (ciphers.DEFAULT) {
-      command.push(
-        CURL.CIPHERS,
-        typeof ciphers.DEFAULT === 'string'
-          ? ciphers.DEFAULT
-          : ciphers.DEFAULT.join(':'),
-      );
-    }
-    if (ciphers.TLS13 && tls_versions.includes(772)) {
-      command.push(
-        CURL.TLS13_CIPHERS,
-        typeof ciphers.TLS13 === 'string'
-          ? ciphers.TLS13
-          : ciphers.TLS13.join(':'),
-      );
-    }
-  }
+  buildTLSOptions(options, cmd);
+  await buildDNSOptions(url, options, cmd);
 
-  // ── Append Compression, DNS Servers & DNS Resolve ──
-  if (compress && method !== 'HEAD') command.push(CURL.COMPRESSED);
-  if (options.dns?.servers && SUPPORTS.DNS_SERVERS)
-    command.push(CURL.DNS_SERVERS, options.dns.servers.join(','));
+  if (options.compress && method !== 'HEAD') cmd.push(CURL.COMPRESSED);
+  if (init.tcp?.fastOpen && SUPPORTS.TCP_FASTOPEN) cmd.push(CURL.TCP_FASTOPEN);
+  if (init.tcp?.noDelay && SUPPORTS.TCP_NODELAY) cmd.push(CURL.TCP_NODELAY);
+  if (options.proxy) cmd.push(CURL.PROXY, formatProxyString(options.proxy));
 
-  if (SUPPORTS.DNS_RESOLVE && containsAlphabet(url.host)) {
-    let resolveIP: string | null = options.dns?.resolve || null;
-    let cachedIP = DNS_CACHE_MAP.get(url.host) || undefined;
-    if (!options.dns?.resolve) {
-      if (options.dns?.cache && cachedIP) {
-        resolveIP = cachedIP;
-      } else {
-        try {
-          const lookup = await dns.lookup(url.host, { family: 4 });
-          if (lookup.length) resolveIP = lookup[0].address;
-        } catch {}
-      }
-    }
-    if (resolveIP && isValidIPv4(resolveIP)) {
-      if (!options.dns?.resolve && options.dns?.cache && !cachedIP) {
-        DNS_CACHE_MAP.set(url.host, resolveIP, typeof options.dns.cache === "number" ? options.dns.cache : 30);
-      }
-      const port = getDefaultPort(url.protocol);
-      command.push(CURL.DNS_RESOLVE, `${url.host}:${port}:${resolveIP}`);
-    }
-  }
-
-  // ── Append TCP Options & Proxy ──
-  if (init.tcp?.fastOpen && SUPPORTS.TCP_FASTOPEN)
-    command.push(CURL.TCP_FASTOPEN);
-  if (init.tcp?.noDelay && SUPPORTS.TCP_NODELAY) command.push(CURL.TCP_NODELAY);
-
-  if (options.proxy) command.push(CURL.PROXY, formatProxyString(options.proxy));
-
-  // ── Append Follow Redirect & HTTP Keep-Alive Options ──
-  if (options.follow !== undefined && options.follow !== false) {
-    command.push(
+  if (options.follow ?? true) {
+    cmd.push(
       CURL.FOLLOW,
       CURL.MAX_REDIRS,
-      typeof options.follow === 'number' ? options.follow.toString() : '10',
+      String(typeof options.follow === 'number' ? options.follow : 10),
     );
   }
-  if (httpVersion === 1.1) {
-    if (options.http?.keepAlive === false || options.http?.keepAlive === 0) {
-      command.push(CURL.NO_KEEPALIVE);
-    } else if (typeof options.http?.keepAlive === 'number') {
-      command.push(CURL.KEEPALIVE_TIME, options.http.keepAlive.toString());
-    }
-    if (typeof options.http?.keepAliveProbes === 'number') {
-      command.push(CURL.KEEPALIVE_CNT, options.http.keepAliveProbes.toString());
-    }
+
+  if (version === 1.1) {
+    if (options.http?.keepAlive === false || options.http?.keepAlive === 0)
+      cmd.push(CURL.NO_KEEPALIVE);
+    else if (typeof options.http?.keepAlive === 'number')
+      cmd.push(CURL.KEEPALIVE_TIME, String(options.http.keepAlive));
+    if (typeof options.http?.keepAliveProbes === 'number')
+      cmd.push(CURL.KEEPALIVE_CNT, String(options.http.keepAliveProbes));
   }
 
-  // ── Prepare Request Body ──
-  let prepared: { body: string | Buffer; type?: string } | undefined;
+  let prepared;
   if (options.body) {
     prepared = await prepareRequestBody(options.body);
-    const bodyData =
+    const data =
       typeof prepared.body === 'string'
         ? prepared.body
         : prepared.body.toString('utf-8');
-    command.push(CURL.DATA_RAW, bodyData);
+    cmd.push(CURL.DATA_RAW, data);
   }
 
-  // ── Append Headers ──
-  let contentTypeProvided = false,
-    userAgent: string = init.defaultAgent || `Bun/${Bun.version}`;
-  if (options.headers) {
-    const orderedHeaders = orderHeaders(options.headers);
-    for (const [key, value] of orderedHeaders) {
-      if (key == 'content-type') contentTypeProvided = true;
-      if (key == 'user-agent') userAgent = value;
-      else command.push(CURL.HEADER, `${key}: ${value}`);
-    }
+  const ordered = prepareHeaders(options.headers, options.sortHeaders!);
+  let hasCt = false;
+  let ua = init.defaultAgent ?? `Bun/${Bun.version}`;
+  for (const [k, v] of ordered) {
+    if (k.toLowerCase() === 'content-type') hasCt = true;
+    if (k.toLowerCase() === 'user-agent') ua = v;
+    else cmd.push(CURL.HEADER, `${k}: ${v}`);
   }
-  // Always add user-agent using -A flag.
-  command.push(CURL.USER_AGENT, userAgent);
+  cmd.push(CURL.USER_AGENT, ua);
+  if (prepared?.type && !hasCt)
+    cmd.push(CURL.HEADER, `content-type: ${prepared.type}`);
 
-  if (prepared && prepared.type && !contentTypeProvided) {
-    command.push(CURL.HEADER, `content-type: ${prepared.type}`);
-  }
+  if (method === 'HEAD') cmd.push(CURL.HEAD);
+  else cmd.push(CURL.METHOD, method);
 
-  // ── Append HTTP Method & Final URL ──
-  method === 'HEAD'
-    ? command.push(CURL.HEAD)
-    : command.push(CURL.METHOD, method);
+  cmd.push(urlStr.replace(/\[|\]/g, (c) => (c === '[' ? '%5B' : '%5D')));
 
-  command.push(
-    urlString.replace(/[\[\]]/g, char => (char === '[' ? '%5B' : '%5D')),
-  );
-
-  return command;
+  return cmd;
 }
