@@ -13,6 +13,12 @@ import { RedisClient } from 'bun';
 
 let concurrentRequests = 0;
 
+const concurrentError = (max: number, options: RequestInit, url: string) =>
+  Object.assign(
+    new Error(`[BunCurl2] - Maximum concurrent requests (${max}) reached`),
+    { code: 'ERR_CONCURRENT_REQUESTS_REACHED', options: { ...options, url } },
+  );
+
 export default async function Http<T = any>(
   url: string,
   options: RequestInit<T> = {},
@@ -21,28 +27,26 @@ export default async function Http<T = any>(
   prepareOptions(options, init);
 
   const maxConcurrent = init.maxConcurrentRequests ?? 250;
-  if (concurrentRequests >= maxConcurrent) {
-    throw Object.assign(
-      new Error(
-        `[BunCurl2] - Maximum concurrent requests (${maxConcurrent}) reached`,
-      ),
-      { code: 'ERR_CONCURRENT_REQUESTS_REACHED', options: { ...options, url } },
-    );
-  }
+  if (concurrentRequests >= maxConcurrent)
+    throw concurrentError(maxConcurrent, options, url);
 
   let cacheKey: string | undefined;
-  if (options.cache && init.cache?.server) {
-    if (typeof options.cache === 'object' && options.cache.generate) {
-      cacheKey = await options.cache.generate({ url, ...options });
-    } else {
-      cacheKey = generateCacheKey(url, options);
-    }
-    const cached = await init.cache.server.get(cacheKey);
+  const cacheServer = init.cache?.server;
+
+  if (options.cache && cacheServer) {
+    cacheKey = await getCacheKey(url, options);
+    const cached = await cacheServer.get(cacheKey);
     if (cached != null) {
       try {
         const ts = performance.now();
         const { finalUrl, body } = extractFinalUrl(cached);
-        const resp = ProcessResponse(finalUrl || url, body, ts, options.parseJSON!, true);
+        const resp = ProcessResponse(
+          finalUrl || url,
+          body,
+          ts,
+          options.parseJSON!,
+          true,
+        );
         const built = BuildResponse<T>(resp, options, init);
         return options.transformResponse
           ? options.transformResponse(built)
@@ -56,115 +60,134 @@ export default async function Http<T = any>(
   }
 
   concurrentRequests++;
-
-  const tsStart = performance.now();
-  const cmd = await BuildCommand<T>(new URL(url), options, init);
-  const proc = Bun.spawn(cmd, { stdout: 'pipe', stderr: 'pipe' });
-
-  const stdoutPromise = (async () => {
-    const buf = await new Response(proc.stdout).arrayBuffer();
-    return Buffer.from(buf).toString('binary');
-  })();
-
-  const stderrPromise = (async () => {
-    const buf = await new Response(proc.stderr).arrayBuffer();
-    return Buffer.from(buf).toString('utf-8');
-  })();
-
-  const abortPromise = new Promise<never>((_res, reject) => {
-    if (options.signal) {
-      if (options.signal.aborted) {
-        proc.kill();
-        reject(new DOMException('The operation was aborted.', 'AbortError'));
-      } else {
-        options.signal.addEventListener(
-          'abort',
-          () => {
-            proc.kill();
-            reject(
-              new DOMException('The operation was aborted.', 'AbortError'),
-            );
-          },
-          { once: true },
-        );
-      }
-    }
-  });
-
-  let stdout: string;
+  let proc: Bun.Subprocess | undefined;
   try {
-    stdout = await Promise.race([stdoutPromise, abortPromise]);
-  } catch (err) {
-    await proc.exited;
-    concurrentRequests--;
-    throw err;
-  }
+    const tsStart = performance.now();
+    const cmd = await BuildCommand<T>(new URL(url), options, init);
+    proc = Bun.spawn(cmd, { stdout: 'pipe', stderr: 'pipe' });
 
-  await proc.exited;
-  concurrentRequests--;
-  const stderrData = await stderrPromise;
+    // helper to narrow proc.stdout into a ReadableStream<Uint8Array>
+    const stdoutPromise = (async () => {
+      if (!proc!.stdout) throw new Error('[BunCurl2] - Missing stdout');
+      const outStream =
+        typeof proc!.stdout === 'number'
+          ? Bun.file(proc!.stdout, { type: 'stream' }).stream()
+          : proc!.stdout;
+      const buf = await new Response(
+        outStream as ReadableStream<Uint8Array>,
+      ).arrayBuffer();
+      return Buffer.from(buf).toString('binary');
+    })();
 
-  if (proc.exitCode !== 0) {
-    const msg = stderrData.trim().replace(/curl:\s*\(\d+\)\s*/, '');
-    throw Object.assign(new Error(`[BunCurl2] - ${msg}`), {
-      code: 'ERR_CURL_FAILED',
-      exitCode: proc.exitCode,
-      options: { ...options, url },
+    const abortPromise = new Promise<never>((_, reject) => {
+      if (options.signal) {
+        if (options.signal.aborted) {
+          proc!.kill();
+          reject(new DOMException('The operation was aborted.', 'AbortError'));
+        } else {
+          options.signal.addEventListener(
+            'abort',
+            () => {
+              proc!.kill();
+              reject(
+                new DOMException('The operation was aborted.', 'AbortError'),
+              );
+            },
+            { once: true },
+          );
+        }
+      }
     });
-  }
 
-  const { finalUrl, body } = extractFinalUrl(stdout);
-  const resp = ProcessResponse(
-    finalUrl || url,
-    body,
-    tsStart,
-    options.parseJSON!,
-    false,
-  );
-  const builtRes = BuildResponse<T>(resp, options, init);
-
-  if (cacheKey && init.cache?.server && typeof options.cache === 'object') {
-    if (
-      typeof options.cache.validate === 'function' &&
-      !(await options.cache.validate(builtRes))
-    ) {
-      return options.transformResponse
-        ? options.transformResponse(builtRes)
-        : builtRes;
+    let stdout: string;
+    try {
+      stdout = await Promise.race([stdoutPromise, abortPromise]);
+    } catch (err) {
+      await proc!.exited;
+      throw err;
     }
 
-    const expire =
-      typeof options.cache.expire === 'number'
-        ? options.cache.expire
-        : init.cache!.defaultExpiration!;
+    await proc.exited;
 
-    if (init.cache.server instanceof LocalCache) {
-      init.cache.server.set(cacheKey, stdout, expire);
-    } else if (init.cache.server instanceof RedisClient) {
-      // There's some type of expiration delay within Bun redis API so we need to
-      // Make it expire atleast 2ms earlier
-      // Not perfect but i couldn't think of anything else :(
-      await init.cache.server.send('SET', [
-        cacheKey,
-        stdout,
-        'PX',
-        String(expire * 1000 - 2),
-        'NX',
-      ]);
-    } else {
-      await init.cache.server.set(cacheKey, stdout, {
-        expiration: {
-          type: 'EX',
-          value: expire,
-        },
-        condition: 'NX',
+    if (proc.exitCode !== 0) {
+      const stderrData = await (async () => {
+        if (!proc!.stderr) throw new Error('[BunCurl2] - Missing stderr');
+        const errStream =
+          typeof proc!.stderr === 'number'
+            ? Bun.file(proc!.stderr, { type: 'stream' }).stream()
+            : proc!.stderr;
+        const buf = await new Response(
+          errStream as ReadableStream<Uint8Array>,
+        ).arrayBuffer();
+        return Buffer.from(buf).toString('utf-8');
+      })();
+
+      const msg = stderrData.trim().replace(/curl:\s*\(\d+\)\s*/, '');
+      throw Object.assign(new Error(`[BunCurl2] - ${msg}`), {
+        code: 'ERR_CURL_FAILED',
+        exitCode: proc.exitCode,
+        options: { ...options, url },
       });
     }
-  }
 
-  return options.transformResponse
-    ? options.transformResponse(builtRes)
-    : builtRes;
+    const { finalUrl, body } = extractFinalUrl(stdout);
+    const resp = ProcessResponse(
+      finalUrl || url,
+      body,
+      tsStart,
+      options.parseJSON!,
+      false,
+    );
+    const builtRes = BuildResponse<T>(resp, options, init);
+
+    if (cacheKey && cacheServer && typeof options.cache === 'object') {
+      if (
+        typeof options.cache.validate === 'function' &&
+        !(await options.cache.validate(builtRes))
+      ) {
+        return options.transformResponse
+          ? options.transformResponse(builtRes)
+          : builtRes;
+      }
+
+      const expire =
+        typeof options.cache.expire === 'number'
+          ? options.cache.expire
+          : init.cache!.defaultExpiration!;
+
+      if (cacheServer instanceof LocalCache) {
+        cacheServer.set(cacheKey, stdout, expire);
+      } else if (cacheServer instanceof RedisClient) {
+        await cacheServer.send('SET', [
+          cacheKey,
+          stdout,
+          'PX',
+          String(expire * 1000 - 5),
+          'NX',
+        ]);
+      } else {
+        await cacheServer.set(cacheKey, stdout, {
+          expiration: { type: 'EX', value: expire },
+          condition: 'NX',
+        });
+      }
+    }
+
+    return options.transformResponse
+      ? options.transformResponse(builtRes)
+      : builtRes;
+  } finally {
+    concurrentRequests--;
+  }
+}
+
+async function getCacheKey<T>(
+  url: string,
+  options: RequestInit<T>,
+): Promise<string> {
+  if (typeof options.cache === 'object' && options.cache.generate)
+    return options.cache.generate({ url, ...options });
+  return generateCacheKey(url, options);
 }
 
 function prepareOptions<T>(

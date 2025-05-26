@@ -20,32 +20,40 @@ class ResponseWrapper<T> {
    * Returns the body as a parsed JSON object.
    */
   json(): T {
-    return typeof this.response === 'object'
-      ? this.response
-      : JSON.parse(this.response as string);
+    // avoid typeof twice
+    const resp = this.response;
+    return (
+      typeof resp === 'object' ? resp : JSON.parse(resp as unknown as string)
+    ) as T;
   }
 
   /**
    * Returns the body as a string.
    */
   text(): string {
-    return typeof this.response === 'object'
-      ? JSON.stringify(this.response)
-      : (this.response as string);
+    const resp = this.response;
+    return typeof resp === 'object'
+      ? JSON.stringify(resp)
+      : (resp as unknown as string);
   }
 
   /**
    * Returns the body as an ArrayBuffer.
    */
   arrayBuffer(): ArrayBuffer {
-    return Buffer.from(this.text(), 'binary').buffer as ArrayBuffer;
+    // Buffer.from returns a Node Buffer (Uint8Array subclass)
+    // its .buffer is a true ArrayBuffer
+    const buf = Buffer.from(this.text(), 'binary').buffer as ArrayBuffer;
+    return buf;
   }
 
   /**
    * Returns the body as a Blob.
    */
   blob(): Blob {
-    return new Blob([Buffer.from(this.text(), 'binary')]);
+    // pass the Buffer (Uint8Array) directly as a BlobPart
+    const bufView = Buffer.from(this.text(), 'binary');
+    return new Blob([bufView]);
   }
 }
 
@@ -57,61 +65,74 @@ function BuildResponse<T>(
   options: RequestInit<T>,
   initialized: GlobalInit,
 ): ResponseWrapper<T> {
+  // enforce max body size early
   if (initialized.maxBodySize) {
-    const MAX_BODY_SIZE = initialized.maxBodySize * 1024 * 1024;
-
-    if (responseData.body.length > MAX_BODY_SIZE) {
-      const maxBodySizeError = new Error(
-        `[BunCurl2] - Maximum body size exceeded (${responseData.body.length / (1024 * 1024)})`,
+    const maxBytes = initialized.maxBodySize * 1024 * 1024;
+    if (responseData.body.length > maxBytes) {
+      const err = new Error(
+        `[BunCurl2] - Maximum body size exceeded (${(
+          responseData.body.length /
+          (1024 * 1024)
+        ).toFixed(2)} MiB)`,
       );
-      Object.defineProperty(maxBodySizeError, 'code', {
-        value: 'ERR_BODY_SIZE_EXCEEDED',
-      });
-      throw maxBodySizeError;
+      Object.defineProperty(err, 'code', { value: 'ERR_BODY_SIZE_EXCEEDED' });
+      throw err;
     }
   }
 
-  // Detect Content-Type to handle text vs non-text responses
-  const contentTypeHeader = responseData.headers.find(
-    ([key]) => key.toLowerCase() === 'content-type',
-  );
-  const contentType = contentTypeHeader ? contentTypeHeader[1] : '';
+  // locate content-type header quickly
+  let contentType = '';
+  for (const [k, v] of responseData.headers) {
+    if (
+      k.charCodeAt(0) === 0x63 /* 'c' */ &&
+      k.toLowerCase() === 'content-type'
+    ) {
+      contentType = v;
+      break;
+    }
+  }
+  const lowerCT = contentType.toLowerCase();
 
   // Determine if the response is text-based or binary
   const isTextResponse =
-    contentType.startsWith('text/') ||
-    contentType.includes('json') ||
-    contentType.includes('xml') ||
-    contentType.includes('javascript');
+    lowerCT.startsWith('text/') ||
+    lowerCT.includes('json') ||
+    lowerCT.includes('xml') ||
+    lowerCT.includes('javascript');
 
   // Parse text-based responses
-  let res: T = isTextResponse
-    ? (Buffer.from(responseData.body, 'binary').toString('utf-8') as T)
-    : (responseData.body as unknown as T);
-
-  // Parse JSON if applicable
-  if (isTextResponse && responseData.parseJSON) {
-    try {
-      let i = JSON.parse(res as string);
-      if (hasJsonStructure(i)) {
-        res = i;
+  let res: T;
+  if (isTextResponse) {
+    // turn the raw binary string into a UTF-8 string via Buffer
+    const rawUtf8 = Buffer.from(responseData.body, 'binary').toString('utf-8');
+    if (responseData.parseJSON) {
+      try {
+        const parsed = JSON.parse(rawUtf8);
+        if (hasJsonStructure(parsed)) {
+          res = parsed as T;
+        } else {
+          res = rawUtf8 as unknown as T;
+        }
+      } catch {
+        res = rawUtf8 as unknown as T;
       }
-      i = null!;
-    } catch {
-      // If parsing fails, retain the body as-is
+    } else {
+      res = rawUtf8 as unknown as T;
     }
+  } else {
+    res = responseData.body as unknown as T;
   }
 
-  const redirected = responseData.status >= 300 && responseData.status < 400;
-  const type = responseData.status >= 400 ? 'error' : 'default';
-  const ok = responseData.status >= 200 && responseData.status < 300;
+  const status = responseData.status;
+  const ok = status >= 200 && status < 300;
+  const redirected = status >= 300 && status < 400;
+  const type = status >= 400 ? 'error' : 'default';
 
-  // Return the wrapped response
-  const response = new ResponseWrapper<T>(
+  return new ResponseWrapper<T>(
     responseData.url,
     res,
     new Headers(responseData.headers),
-    responseData.status,
+    status,
     ok,
     redirected,
     type,
@@ -119,8 +140,6 @@ function BuildResponse<T>(
     performance.now() - responseData.requestStartTime,
     options,
   );
-
-  return response;
 }
 
 function ProcessResponse(
@@ -130,104 +149,42 @@ function ProcessResponse(
   parseJSON: boolean,
   cached: boolean,
 ): BaseResponseInit {
-  const len = stdout.length;
-  let headerStartIndex = -1;
-  // Scan backward for a newline followed by "HTTP/" to locate the final header block.
-  for (let i = len - 6; i >= 0; i--) {
-    // Check for "\nHTTP/" (or if at the very beginning, "HTTP/" at position 0)
-    if (
-      (i === 0 && stdout.startsWith('HTTP/')) ||
-      (stdout.charAt(i) === '\n' && stdout.substring(i + 1, i + 6) === 'HTTP/')
-    ) {
-      headerStartIndex = i === 0 ? 0 : i + 1;
-      break;
-    }
-  }
-  if (headerStartIndex === -1) {
-    // Fallback to lastIndexOf if backward scan failed.
-    headerStartIndex = stdout.lastIndexOf('HTTP/');
-    if (headerStartIndex === -1) {
-      const invalidBodyError = new Error(
-        `[BunCurl2] - Received unknown response (${stdout})`,
-      );
-      Object.defineProperty(invalidBodyError, 'code', {
-        value: 'ERR_INVALID_RESPONSE_BODY',
-      });
-      throw invalidBodyError;
-    }
+  // find last "HTTP/" occurrence
+  const headerStart = stdout.lastIndexOf('\nHTTP/');
+  const startIdx =
+    headerStart >= 0 ? headerStart + 1 : stdout.indexOf('HTTP/') >= 0 ? 0 : -1;
+  if (startIdx === -1) {
+    const err = new Error(`[BunCurl2] - Received unknown response (${stdout})`);
+    Object.defineProperty(err, 'code', { value: 'ERR_INVALID_RESPONSE_BODY' });
+    throw err;
   }
 
-  // Now search for the header/body delimiter starting at headerStartIndex.
-  let headerEndIndex = stdout.indexOf('\r\n\r\n', headerStartIndex);
-  let delimiterLength = 4;
-  if (headerEndIndex === -1) {
-    headerEndIndex = stdout.indexOf('\n\n', headerStartIndex);
-    delimiterLength = 2;
+  // find header/body delimiter
+  let headerEnd = stdout.indexOf('\r\n\r\n', startIdx);
+  let delimLen = 4;
+  if (headerEnd === -1) {
+    headerEnd = stdout.indexOf('\n\n', startIdx);
+    delimLen = 2;
   }
-  if (headerEndIndex === -1) {
-    const invalidBodyError = new Error(
-      `[BunCurl2] - Received unknown response (${stdout})`,
-    );
-    Object.defineProperty(invalidBodyError, 'code', {
-      value: 'ERR_INVALID_RESPONSE_BODY',
-    });
-    throw invalidBodyError;
+  if (headerEnd === -1) {
+    const err = new Error(`[BunCurl2] - Received unknown response (${stdout})`);
+    Object.defineProperty(err, 'code', { value: 'ERR_INVALID_RESPONSE_BODY' });
+    throw err;
   }
 
-  // Extract the header block and body.
-  const headerBlock = stdout.substring(headerStartIndex, headerEndIndex);
-  const body = stdout.substring(headerEndIndex + delimiterLength).trim();
+  const headerBlock = stdout.slice(startIdx, headerEnd);
+  const body = stdout.slice(headerEnd + delimLen).trim();
 
-  // Process the status line.
-  let firstLineEnd = headerBlock.indexOf('\r\n');
-  if (firstLineEnd === -1) firstLineEnd = headerBlock.indexOf('\n');
-  if (firstLineEnd === -1) firstLineEnd = headerBlock.length;
-  const statusLine = headerBlock.substring(0, firstLineEnd);
-  let status = 500;
-  const firstSpace = statusLine.indexOf(' ');
-  if (firstSpace !== -1) {
-    const secondSpace = statusLine.indexOf(' ', firstSpace + 1);
-    const codeStr =
-      secondSpace !== -1
-        ? statusLine.substring(firstSpace + 1, secondSpace)
-        : statusLine.substring(firstSpace + 1);
-    status = parseInt(codeStr, 10) || 500;
-  }
+  // parse status line
+  const [statusLine, ..._] = headerBlock.split(/\r?\n/, 2);
+  const statusCode = parseInt(statusLine.split(' ')[1] || '', 10) || 500;
 
-  // Manually scan for header lines after the status line.
+  // parse headers
   const headers: string[][] = [];
-  let pos = firstLineEnd;
-  // Determine the newline length (CRLF or LF) based on the first line break.
-  let newlineLen = headerBlock.charAt(pos) === '\r' ? 2 : 1;
-  pos += newlineLen; // Skip the status line.
-
-  while (pos < headerBlock.length) {
-    let nextPos = pos;
-    while (nextPos < headerBlock.length) {
-      const ch = headerBlock.charAt(nextPos);
-      if (ch === '\r' || ch === '\n') break;
-      nextPos++;
-    }
-    const line = headerBlock.substring(pos, nextPos);
-    const colonIndex = line.indexOf(': ');
-    if (colonIndex !== -1) {
-      headers.push([
-        line.substring(0, colonIndex),
-        line.substring(colonIndex + 2),
-      ]);
-    }
-    // Advance pos: handle both CRLF and LF.
-    if (nextPos < headerBlock.length) {
-      if (
-        headerBlock.charAt(nextPos) === '\r' &&
-        headerBlock.charAt(nextPos + 1) === '\n'
-      ) {
-        pos = nextPos + 2;
-      } else {
-        pos = nextPos + 1;
-      }
-    } else {
-      break;
+  for (const line of headerBlock.split(/\r?\n/).slice(1)) {
+    const idx = line.indexOf(': ');
+    if (idx > 0) {
+      headers.push([line.slice(0, idx), line.slice(idx + 2)]);
     }
   }
 
@@ -235,7 +192,7 @@ function ProcessResponse(
     url,
     body,
     headers,
-    status,
+    status: statusCode,
     requestStartTime,
     parseJSON,
     cached,

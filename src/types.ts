@@ -329,7 +329,7 @@ interface ExtraOptions<T> {
 
   /**
    * @description
-   * Re-serialize headers in the Canonical HTTP/1.1 Header Order (RFC 2616 §14).
+   * Re-serialize request headers in the Canonical HTTP/1.1 Header Order (RFC 2616 §14).
    *
    * @default true
    */
