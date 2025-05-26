@@ -41,7 +41,8 @@ export default async function Http<T = any>(
     if (cached != null) {
       try {
         const ts = performance.now();
-        const resp = ProcessResponse(url, cached, ts, options.parseJSON!, true);
+        const { finalUrl, body } = extractFinalUrl(cached);
+        const resp = ProcessResponse(finalUrl || url, body, ts, options.parseJSON!, true);
         const built = BuildResponse<T>(resp, options, init);
         return options.transformResponse
           ? options.transformResponse(built)
