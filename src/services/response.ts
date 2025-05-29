@@ -53,33 +53,53 @@ export function processResponses(
   cached: boolean,
 ): BaseResponseInit[] {
   const entries: BaseResponseInit[] = [];
-  let idx = 0;
+  const rawLen = raw.length;
+  const starts: number[] = [];
 
+  let pos = 0;
   while (true) {
-    const pos = raw.indexOf('HTTP/', idx);
-    if (pos < 0) break;
-    const nextPos = raw.indexOf('\nHTTP/', pos + 1);
-    const part = nextPos > 0 ? raw.slice(pos, nextPos) : raw.slice(pos);
-    idx = nextPos > 0 ? nextPos : raw.length;
-
-    let sep = part.indexOf('\r\n\r\n');
-    let sepLen = 4;
-    if (sep < 0) {
-      sep = part.indexOf('\n\n');
-      sepLen = 2;
+    const idx = raw.indexOf('HTTP/', pos);
+    if (idx === -1) break;
+    if (
+      idx === 0 ||
+      raw[idx - 1] === '\n' ||
+      (idx > 1 && raw[idx - 1] === '\r' && raw[idx - 2] === '\n')
+    ) {
+      starts.push(idx);
     }
+    pos = idx + 5;
+  }
+  if (starts.length === 0) return entries;
+  starts.push(rawLen);
 
-    const headerBlock = sep >= 0 ? part.slice(0, sep) : part;
-    const body = sep >= 0 ? part.slice(sep + sepLen).trim() : '';
+  for (let i = 0; i < starts.length - 1; i++) {
+    const part = raw.substring(starts[i], starts[i + 1]).replace(/^\r?\n/, '');
+    const rnrn = part.indexOf('\r\n\r\n');
+    const nn = part.indexOf('\n\n');
+    let hdrEnd = rnrn > -1 ? rnrn : nn > -1 ? nn : part.length;
+    let sepLen = rnrn > -1 ? 4 : nn > -1 ? 2 : 0;
 
-    const lines = headerBlock.split(/\r?\n/);
-    const status = parseInt(lines[0].split(' ')[1]) || 500;
+    const headerBlock = part.substring(0, hdrEnd);
+    const body = sepLen ? part.substring(hdrEnd + sepLen).trim() : '';
+
+    const lineEnd = headerBlock.indexOf('\r\n');
+    const statusLine =
+      lineEnd > -1 ? headerBlock.substring(0, lineEnd) : headerBlock;
+    const status = parseInt(statusLine.split(' ')[1], 10) || 500;
 
     const hdrs: string[][] = [];
-    for (let i = 1; i < lines.length; i++) {
-      const line = lines[i];
-      const j = line.indexOf(': ');
-      if (j > 0) hdrs.push([line.slice(0, j), line.slice(j + 2)]);
+    let cursor = lineEnd > -1 ? lineEnd + 2 : statusLine.length;
+    while (cursor < headerBlock.length) {
+      const nextEnd = headerBlock.indexOf('\r\n', cursor);
+      const endPos = nextEnd > -1 ? nextEnd : headerBlock.length;
+      const colon = headerBlock.indexOf(': ', cursor);
+      if (colon > cursor && colon < endPos) {
+        hdrs.push([
+          headerBlock.substring(cursor, colon),
+          headerBlock.substring(colon + 2, endPos),
+        ]);
+      }
+      cursor = endPos + 2;
     }
 
     entries.push({
@@ -174,6 +194,13 @@ export function processAndBuild<T, U extends boolean = false>(
   cfg: GlobalInit,
 ): ResponseInit<T, U> {
   const entries = processResponses(url, raw, startTime, parseJSON, cached);
+
+  if (entries.length > 1) {
+    const firstHdrs = new Headers(entries[0].headers);
+    if (!firstHdrs.has('location')) {
+      entries.shift();
+    }
+  }
 
   if (cfg.redirectsAsUrls === true) {
     let cur = url;

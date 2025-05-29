@@ -21,7 +21,7 @@ const bunCurl = new BunCurl2({
   tcp: { fastOpen: true, noDelay: true },
   // Global request transformer:
   // Adds a custom header and, if the URL contains '/submit', forces the method to POST.
-  transfomRequest(args) {
+  transformRequest(args) {
     if (args.headers) {
       if (args.headers instanceof Headers) {
         args.headers.set('x-global-header', 'global_value');

@@ -191,20 +191,13 @@ export default async function BuildCommand<T, U extends boolean>(
   const connTimeout = options.connectionTimeout ?? 5;
   const method = options.method!.toUpperCase();
   const version =
-    options.http?.version ??
-    (SUPPORTS.HTTP3 && !options.proxy
-      ? HTTP.Version30
-      : SUPPORTS.HTTP2
-        ? HTTP.Version20
-        : HTTP.Version11);
+    options.http?.version ?? (SUPPORTS.HTTP2 ? HTTP.Version20 : HTTP.Version11);
 
   const cmd = [
     CURL.BASE,
     CURL.INFO,
     CURL.SILENT,
     CURL.SHOW_ERROR,
-    // CURL.WRITE_OUT,
-    // '\nFinal-Url:%{url_effective}',
     CURL.TIMEOUT,
     String(maxTime),
     CURL.CONNECT_TIMEOUT,

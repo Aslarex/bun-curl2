@@ -1,6 +1,6 @@
 {
   "name": "bun-curl2",
-  "version": "0.0.33-dev.3",
+  "version": "0.0.33",
   "author": {
     "name": "Nicholas",
     "url": "https://github.com/Aslarex",
@@ -37,14 +37,14 @@
   ],
   "types": "./dist/index.d.ts",
   "optionalDependencies": {
-    "redis": "^5.1.0",
+    "redis": "^5.1.1",
     "prettier": "^3.5.3"
   },
   "devDependencies": {
-    "@types/bun": "^1.2.14",
-    "@types/node": "^22.15.21",
-    "bun-types": "^1.2.14",
-    "esbuild": "^0.25.4",
+    "@types/bun": "^1.2.15",
+    "@types/node": "^22.15.24",
+    "bun-types": "^1.2.15",
+    "esbuild": "^0.25.5",
     "typescript": "^5.8.3"
   }
 }

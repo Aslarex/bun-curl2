@@ -2,6 +2,33 @@
 
 > **Note:** Dates are formatted as `yyyy-mm-dd`.
 
+## [0.0.33] - 2025-05-29 
+
+> ⚠️ **WARNING:** Before upgrading, **clear your Redis cache** — any previously cached requests may not be parsed correctly.
+
+- **Redis support**  
+  Now compatible with Bun’s native Redis client. To continue using the npm-based implementation, enable `GlobalInit.cache.useRedisPackage` or configure your own cache server.
+
+- **Performance improvements**
+  Although less noticeable for small responses, difference is major for larger ones.
+
+- **New**: `RequestInit.sortHeaders`  
+  Control header ordering prior to dispatch.
+
+- **Fix**: Typo in `transformRequest` (previously `transfomRequest`)
+
+- **New**: `ResponseInit.redirects`  
+  Collects redirect entries as full response objects by default. To receive URLs only, set the `redirectsAsUrls` client option.
+
+- **Improved** response handler for more reliable parsing.
+
+- **Fix**: Corrected `ResponseInit.redirected` flag logic so it now reflects actual redirects.
+
+- **New**: `GlobalInit.maxConcurrentRequests`  
+  Limit simultaneous requests to prevent overload.
+
+- **Fix**: Corrected typos in JSDoc comments.
+
 ## [0.0.32] - 2025-03-29
 
 - Request headers are now ordered, accept array pairs, and respect key casing if it’s not a `Headers` instance.
