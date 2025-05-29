@@ -63,21 +63,6 @@ export function md5(str: string) {
   return crypto.createHash('md5').update(str).digest('hex');
 }
 
-// Helper: extract final URL from the output using a custom marker.
-export function extractFinalUrl(output: string): {
-  finalUrl: string | null;
-  body: string;
-} {
-  const marker = '\nFinal-Url:';
-  const markerIndex = output.lastIndexOf(marker);
-  if (markerIndex === -1) {
-    return { finalUrl: null, body: output };
-  }
-  const finalUrl = output.slice(markerIndex + marker.length).trim();
-  const body = output.slice(0, markerIndex);
-  return { finalUrl, body };
-}
-
 export function getDefaultPort(protocol: string): number | undefined {
   return PROTOCOL_PORTS[
     protocol.toLowerCase().replaceAll(':', '').replaceAll('/', '')

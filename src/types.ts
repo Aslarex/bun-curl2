@@ -107,7 +107,9 @@ type GlobalInit = {
    * @param args - The initial RequestInit object.
    * @returns A transformed RequestInit object.
    */
-  transformRequest?: (args: RequestInitWithURL) => RequestInit;
+  transformRequest?: <T, U extends boolean>(
+    args: RequestInitWithURL<T, U>,
+  ) => RequestInit<T, U>;
 
   /**
    * Enables response compression if set to true.
@@ -161,6 +163,13 @@ type GlobalInit = {
    * @default 250
    */
   maxConcurrentRequests?: number;
+
+  /**
+   * @description
+   * If `ResponseInit.redirects` should only contain **URL**-strings instead of **Response** objects
+   * @default false
+   */
+  redirectsAsUrls?: boolean;
 };
 
 /**
@@ -231,14 +240,17 @@ interface Connection {
 
 export type CacheKeys = 'url' | 'body' | 'headers' | 'proxy' | 'method';
 
-export type RequestInitWithURL<T = any> = RequestInit<T> & { url: string };
+export type RequestInitWithURL<
+  T = any,
+  U extends boolean = false,
+> = RequestInit<T, U> & { url: string };
 
 /**
  * Extra options to enhance request and response handling.
  *
  * @template T - The type of data expected in the request or response.
  */
-interface ExtraOptions<T> {
+interface ExtraOptions<T, U extends boolean> {
   /**
    * Function to transform the request options before the request is made.
    *
@@ -246,7 +258,9 @@ interface ExtraOptions<T> {
    * @returns A transformed RequestInit object.
    * @override GlobalInit.transformRequest
    */
-  transformRequest?: ((args: RequestInitWithURL<T>) => RequestInit<T>) | false;
+  transformRequest?:
+    | ((args: RequestInitWithURL<T, U>) => RequestInit<T, U>)
+    | false;
 
   /**
    * Function to transform the response before it is returned to the caller.
@@ -255,8 +269,8 @@ interface ExtraOptions<T> {
    * @returns A transformed Response object.
    */
   transformResponse?: (
-    args: ResponseInit<T>,
-  ) => ResponseInit<T> | Promise<ResponseInit<T>>;
+    args: ResponseInit<T, U>,
+  ) => ResponseInit<T, U> | Promise<ResponseInit<T, U>>;
 
   /**
    * Flag indicating if we should try parsing response to **JSON** automatically.
@@ -282,12 +296,14 @@ interface ExtraOptions<T> {
         /**
          * Function to validate if request is eligible for caching.
          */
-        validate?: (response: ResponseInit<T>) => boolean | Promise<boolean>;
+        validate?: (response: ResponseInit<T, U>) => boolean | Promise<boolean>;
         /**
          * Function for manually generating the cache identifier (key)
          * @override `cache.keys`
          */
-        generate?: (request: RequestInitWithURL<T>) => string | Promise<string>;
+        generate?: (
+          request: RequestInitWithURL<T, U>,
+        ) => string | Promise<string>;
       };
   /**
    * Enables response compression if set to true.
@@ -385,9 +401,9 @@ interface BaseRequestInit {
  *
  * @template T - The type associated with the request body.
  */
-interface RequestInit<T = any>
+interface RequestInit<T = any, U extends boolean = false>
   extends BaseRequestInit,
-    ExtraOptions<T>,
+    ExtraOptions<T, U>,
     Connection {}
 
 /**
@@ -395,7 +411,7 @@ interface RequestInit<T = any>
  *
  * @template T - The type of the response data.
  */
-interface ResponseInit<T = any> {
+interface ResponseInit<T = any, U extends boolean = false> {
   /**
    * The response payload.
    */
@@ -404,7 +420,7 @@ interface ResponseInit<T = any> {
   /**
    * The request options that generated this response.
    */
-  options: RequestInit<T>;
+  options: RequestInit<T, U>;
 
   /**
    * Retrieves the response body as plain text.
@@ -453,6 +469,11 @@ interface ResponseInit<T = any> {
    * Indicates whether the response was redirected.
    */
   redirected: boolean;
+
+  /**
+   * Redirect chain
+   */
+  redirects: U extends true ? string[] : ResponseInit<T, false>[];
 
   /**
    * The type of the response.

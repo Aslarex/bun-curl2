@@ -11,7 +11,6 @@ export type HeadersInit =
 
 export default class CustomHeaders extends Headers {
   constructor(init?: HeadersInit) {
-    // Start with an empty Headers instance.
     super();
     if (init) {
       if (init instanceof Headers && typeof (init as any).raw === 'function') {

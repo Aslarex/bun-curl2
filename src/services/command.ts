@@ -22,6 +22,7 @@ import { sortHeaders } from '../models/headers';
 
 const SUPPORTS = {
   HTTP2: CURL_OUTPUT.includes('http2'),
+  HTTP3: CURL_OUTPUT.includes('http3'),
   DNS_SERVERS: CURL_OUTPUT.includes('c-ares'),
   DNS_RESOLVE: compareVersions(CURL_VERSION, '7.21.3') >= 0,
   TCP_FASTOPEN: compareVersions(CURL_VERSION, '7.49.0') >= 0,
@@ -109,7 +110,10 @@ const prepareHeaders = (
       : Object.entries(headers).map(([k, v]) => [k, String(v)]);
 };
 
-function buildTLSOptions(options: RequestInit<any>, cmd: string[]) {
+function buildTLSOptions<T, U extends boolean>(
+  options: RequestInit<T, U>,
+  cmd: string[],
+) {
   const tlsVers = options.tls?.versions ?? [TLS.Version12, TLS.Version13];
   const [low, high] = [Math.min(...tlsVers), Math.max(...tlsVers)];
   const tlsMap: Record<number, { flag: string; str: string }> = {
@@ -136,9 +140,9 @@ function buildTLSOptions(options: RequestInit<any>, cmd: string[]) {
   }
 }
 
-async function buildDNSOptions(
+async function buildDNSOptions<T, U extends boolean>(
   url: URL,
-  options: RequestInit<any>,
+  options: RequestInit<T, U>,
   cmd: string[],
 ) {
   if (options.dns?.servers && SUPPORTS.DNS_SERVERS)
@@ -171,9 +175,9 @@ async function buildDNSOptions(
   }
 }
 
-export default async function BuildCommand<T>(
+export default async function BuildCommand<T, U extends boolean>(
   url: URL,
-  options: RequestInit<T>,
+  options: RequestInit<T, U>,
   init: GlobalInit,
 ): Promise<string[]> {
   const urlStr = url.toString();
@@ -187,15 +191,20 @@ export default async function BuildCommand<T>(
   const connTimeout = options.connectionTimeout ?? 5;
   const method = options.method!.toUpperCase();
   const version =
-    options.http?.version ?? (SUPPORTS.HTTP2 ? HTTP.Version20 : HTTP.Version11);
+    options.http?.version ??
+    (SUPPORTS.HTTP3 && !options.proxy
+      ? HTTP.Version30
+      : SUPPORTS.HTTP2
+        ? HTTP.Version20
+        : HTTP.Version11);
 
   const cmd = [
     CURL.BASE,
     CURL.INFO,
     CURL.SILENT,
     CURL.SHOW_ERROR,
-    CURL.WRITE_OUT,
-    '\nFinal-Url:%{url_effective}',
+    // CURL.WRITE_OUT,
+    // '\nFinal-Url:%{url_effective}',
     CURL.TIMEOUT,
     String(maxTime),
     CURL.CONNECT_TIMEOUT,
@@ -203,8 +212,8 @@ export default async function BuildCommand<T>(
     CURL.HTTP_VERSION[version],
   ];
 
-  buildTLSOptions(options, cmd);
-  await buildDNSOptions(url, options, cmd);
+  buildTLSOptions<T, U>(options, cmd);
+  await buildDNSOptions<T, U>(url, options, cmd);
 
   if (options.compress && method !== 'HEAD') cmd.push(CURL.COMPRESSED);
   if (init.tcp?.fastOpen && SUPPORTS.TCP_FASTOPEN) cmd.push(CURL.TCP_FASTOPEN);

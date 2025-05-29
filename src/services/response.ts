@@ -1,8 +1,15 @@
-import type { GlobalInit, BaseResponseInit, RequestInit } from '../types';
+import type {
+  GlobalInit,
+  BaseResponseInit,
+  RequestInit,
+  ResponseInit,
+} from '../types';
 import Headers from '../models/headers';
 import { hasJsonStructure } from '../models/utils';
 
-class ResponseWrapper<T> {
+export class ResponseWrapper<T, U extends boolean>
+  implements ResponseInit<T, U>
+{
   constructor(
     public url: string,
     public response: T,
@@ -13,66 +20,93 @@ class ResponseWrapper<T> {
     public type: string,
     public cached: boolean,
     public elapsedTime: number,
-    public options: RequestInit<T>,
+    public options: RequestInit<T, U>,
+    public redirects: ResponseInit<T, U>['redirects'] = [],
   ) {}
 
-  /**
-   * Returns the body as a parsed JSON object.
-   */
   json(): T {
-    // avoid typeof twice
-    const resp = this.response;
-    return (
-      typeof resp === 'object' ? resp : JSON.parse(resp as unknown as string)
-    ) as T;
+    return typeof this.response === 'string'
+      ? JSON.parse(this.response)
+      : this.response;
   }
 
-  /**
-   * Returns the body as a string.
-   */
   text(): string {
-    const resp = this.response;
-    return typeof resp === 'object'
-      ? JSON.stringify(resp)
-      : (resp as unknown as string);
+    return typeof this.response === 'string'
+      ? this.response
+      : JSON.stringify(this.response);
   }
 
-  /**
-   * Returns the body as an ArrayBuffer.
-   */
   arrayBuffer(): ArrayBuffer {
-    // Buffer.from returns a Node Buffer (Uint8Array subclass)
-    // its .buffer is a true ArrayBuffer
-    const buf = Buffer.from(this.text(), 'binary').buffer as ArrayBuffer;
-    return buf;
+    return Buffer.from(this.text(), 'binary').buffer;
   }
 
-  /**
-   * Returns the body as a Blob.
-   */
   blob(): Blob {
-    // pass the Buffer (Uint8Array) directly as a BlobPart
-    const bufView = Buffer.from(this.text(), 'binary');
-    return new Blob([bufView]);
+    return new Blob([Buffer.from(this.text(), 'binary')]);
   }
 }
 
-/**
- * Build the response object
- */
-function BuildResponse<T>(
-  responseData: BaseResponseInit,
-  options: RequestInit<T>,
-  initialized: GlobalInit,
-): ResponseWrapper<T> {
-  // enforce max body size early
-  if (initialized.maxBodySize) {
-    const maxBytes = initialized.maxBodySize * 1024 * 1024;
-    if (responseData.body.length > maxBytes) {
+export function processResponses(
+  url: string,
+  raw: string,
+  startTime: number,
+  parseJSON: boolean,
+  cached: boolean,
+): BaseResponseInit[] {
+  const entries: BaseResponseInit[] = [];
+  let idx = 0;
+
+  while (true) {
+    const pos = raw.indexOf('HTTP/', idx);
+    if (pos < 0) break;
+    const nextPos = raw.indexOf('\nHTTP/', pos + 1);
+    const part = nextPos > 0 ? raw.slice(pos, nextPos) : raw.slice(pos);
+    idx = nextPos > 0 ? nextPos : raw.length;
+
+    let sep = part.indexOf('\r\n\r\n');
+    let sepLen = 4;
+    if (sep < 0) {
+      sep = part.indexOf('\n\n');
+      sepLen = 2;
+    }
+
+    const headerBlock = sep >= 0 ? part.slice(0, sep) : part;
+    const body = sep >= 0 ? part.slice(sep + sepLen).trim() : '';
+
+    const lines = headerBlock.split(/\r?\n/);
+    const status = parseInt(lines[0].split(' ')[1]) || 500;
+
+    const hdrs: string[][] = [];
+    for (let i = 1; i < lines.length; i++) {
+      const line = lines[i];
+      const j = line.indexOf(': ');
+      if (j > 0) hdrs.push([line.slice(0, j), line.slice(j + 2)]);
+    }
+
+    entries.push({
+      url,
+      body,
+      headers: hdrs,
+      status,
+      requestStartTime: startTime,
+      parseJSON,
+      cached,
+    });
+  }
+
+  return entries;
+}
+
+export function buildResponse<T, U extends boolean>(
+  entry: BaseResponseInit,
+  opts: RequestInit<T, U>,
+  cfg: GlobalInit,
+): ResponseInit<T, U> {
+  if (cfg.maxBodySize) {
+    const limit = cfg.maxBodySize * 1024 * 1024;
+    if (entry.body.length > limit) {
       const err = new Error(
         `[BunCurl2] - Maximum body size exceeded (${(
-          responseData.body.length /
-          (1024 * 1024)
+          entry.body.length / limit
         ).toFixed(2)} MiB)`,
       );
       Object.defineProperty(err, 'code', { value: 'ERR_BODY_SIZE_EXCEEDED' });
@@ -80,123 +114,113 @@ function BuildResponse<T>(
     }
   }
 
-  // locate content-type header quickly
-  let contentType = '';
-  for (const [k, v] of responseData.headers) {
-    if (
-      k.charCodeAt(0) === 0x63 /* 'c' */ &&
-      k.toLowerCase() === 'content-type'
-    ) {
-      contentType = v;
+  let ct = '';
+  for (const [k, v] of entry.headers) {
+    if (k.charCodeAt(0) === 99 && k.toLowerCase() === 'content-type') {
+      ct = v;
       break;
     }
   }
-  const lowerCT = contentType.toLowerCase();
+  const lower = ct.toLowerCase();
+  const isText =
+    lower.startsWith('text/') ||
+    lower.includes('json') ||
+    lower.includes('xml') ||
+    lower.includes('javascript');
 
-  // Determine if the response is text-based or binary
-  const isTextResponse =
-    lowerCT.startsWith('text/') ||
-    lowerCT.includes('json') ||
-    lowerCT.includes('xml') ||
-    lowerCT.includes('javascript');
-
-  // Parse text-based responses
-  let res: T;
-  if (isTextResponse) {
-    // turn the raw binary string into a UTF-8 string via Buffer
-    const rawUtf8 = Buffer.from(responseData.body, 'binary').toString('utf-8');
-    if (responseData.parseJSON) {
+  let data: T;
+  if (isText) {
+    const txt = Buffer.from(entry.body, 'binary').toString('utf-8');
+    if (entry.parseJSON) {
       try {
-        const parsed = JSON.parse(rawUtf8);
-        if (hasJsonStructure(parsed)) {
-          res = parsed as T;
-        } else {
-          res = rawUtf8 as unknown as T;
-        }
+        const parsed = JSON.parse(txt);
+        data = hasJsonStructure(parsed) ? (parsed as T) : (txt as unknown as T);
       } catch {
-        res = rawUtf8 as unknown as T;
+        data = txt as unknown as T;
       }
     } else {
-      res = rawUtf8 as unknown as T;
+      data = txt as unknown as T;
     }
   } else {
-    res = responseData.body as unknown as T;
+    data = entry.body as unknown as T;
   }
 
-  const status = responseData.status;
+  const status = entry.status;
   const ok = status >= 200 && status < 300;
-  const redirected = status >= 300 && status < 400;
+  const redir = status >= 300 && status < 400;
   const type = status >= 400 ? 'error' : 'default';
 
-  return new ResponseWrapper<T>(
-    responseData.url,
-    res,
-    new Headers(responseData.headers),
+  return new ResponseWrapper(
+    entry.url,
+    data,
+    new Headers(entry.headers),
     status,
     ok,
-    redirected,
+    redir,
     type,
-    responseData.cached,
-    performance.now() - responseData.requestStartTime,
-    options,
+    entry.cached,
+    performance.now() - entry.requestStartTime,
+    opts,
   );
 }
 
-function ProcessResponse(
+export function processAndBuild<T, U extends boolean = false>(
   url: string,
-  stdout: string,
-  requestStartTime: number,
+  raw: string,
+  startTime: number,
   parseJSON: boolean,
   cached: boolean,
-): BaseResponseInit {
-  // find last "HTTP/" occurrence
-  const headerStart = stdout.lastIndexOf('\nHTTP/');
-  const startIdx =
-    headerStart >= 0 ? headerStart + 1 : stdout.indexOf('HTTP/') >= 0 ? 0 : -1;
-  if (startIdx === -1) {
-    const err = new Error(`[BunCurl2] - Received unknown response (${stdout})`);
-    Object.defineProperty(err, 'code', { value: 'ERR_INVALID_RESPONSE_BODY' });
-    throw err;
+  opts: RequestInit<T, U>,
+  cfg: GlobalInit,
+): ResponseInit<T, U> {
+  const entries = processResponses(url, raw, startTime, parseJSON, cached);
+
+  if (cfg.redirectsAsUrls === true) {
+    let cur = url;
+    const urls: string[] = [];
+
+    for (const entry of entries) {
+      if (entry.status >= 300 && entry.status < 400) {
+        const loc = new Headers(entry.headers).get('location');
+        if (loc) {
+          cur = new URL(loc, cur).toString();
+          urls.push(cur);
+        }
+      }
+    }
+
+    const lastEntry = entries[entries.length - 1];
+    const final = buildResponse<T, U>(lastEntry, opts, cfg) as ResponseInit<
+      T,
+      U
+    >;
+    final.url = cur;
+    final.redirected = urls.length > 0;
+    final.redirects = urls as ResponseInit<T, U>['redirects'];
+    return final;
   }
 
-  // find header/body delimiter
-  let headerEnd = stdout.indexOf('\r\n\r\n', startIdx);
-  let delimLen = 4;
-  if (headerEnd === -1) {
-    headerEnd = stdout.indexOf('\n\n', startIdx);
-    delimLen = 2;
-  }
-  if (headerEnd === -1) {
-    const err = new Error(`[BunCurl2] - Received unknown response (${stdout})`);
-    Object.defineProperty(err, 'code', { value: 'ERR_INVALID_RESPONSE_BODY' });
-    throw err;
-  }
+  const wrappers = entries.map((e) => buildResponse<T, U>(e, opts, cfg));
+  wrappers[0].url = url;
+  let cur = url;
+  const lastIdx = wrappers.length - 1;
 
-  const headerBlock = stdout.slice(startIdx, headerEnd);
-  const body = stdout.slice(headerEnd + delimLen).trim();
-
-  // parse status line
-  const [statusLine, ..._] = headerBlock.split(/\r?\n/, 2);
-  const statusCode = parseInt(statusLine.split(' ')[1] || '', 10) || 500;
-
-  // parse headers
-  const headers: string[][] = [];
-  for (const line of headerBlock.split(/\r?\n/).slice(1)) {
-    const idx = line.indexOf(': ');
-    if (idx > 0) {
-      headers.push([line.slice(0, idx), line.slice(idx + 2)]);
+  for (let i = 0; i < lastIdx; i++) {
+    const w = wrappers[i];
+    if (w.status >= 300 && w.status < 400) {
+      const loc = w.headers.get('location');
+      if (loc) {
+        cur = new URL(loc, cur).toString();
+        wrappers[i + 1].url = cur;
+      }
     }
   }
 
-  return {
-    url,
-    body,
-    headers,
-    status: statusCode,
-    requestStartTime,
-    parseJSON,
-    cached,
-  };
+  const final = wrappers[lastIdx] as ResponseInit<T, U>;
+  final.redirected = lastIdx > 0;
+  final.redirects = wrappers.slice(0, lastIdx) as ResponseInit<
+    T,
+    U
+  >['redirects'];
+  return final;
 }
-
-export { ProcessResponse, BuildResponse, ResponseWrapper };

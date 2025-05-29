@@ -6,24 +6,28 @@ import type {
   CacheInstance,
 } from '../types';
 import BuildCommand from './command';
-import { BuildResponse, ProcessResponse } from './response';
-import { extractFinalUrl, hasJsonStructure, md5 } from '../models/utils';
+import { processAndBuild } from './response';
+import { hasJsonStructure, md5 } from '../models/utils';
 import { LocalCache } from './cache';
 import { RedisClient } from 'bun';
 
 let concurrentRequests = 0;
 
-const concurrentError = (max: number, options: RequestInit, url: string) =>
+const concurrentError = <T, U extends boolean>(
+  max: number,
+  options: RequestInit<T, U>,
+  url: string,
+) =>
   Object.assign(
     new Error(`[BunCurl2] - Maximum concurrent requests (${max}) reached`),
     { code: 'ERR_CONCURRENT_REQUESTS_REACHED', options: { ...options, url } },
   );
 
-export default async function Http<T = any>(
+export default async function Http<T = any, U extends boolean = false>(
   url: string,
-  options: RequestInit<T> = {},
-  init: GlobalInit & { cache?: CacheInstance } = {},
-): Promise<ResponseInit<T>> {
+  options: RequestInit<T, U> = {},
+  init: GlobalInit & { redirectsAsUrls?: U; cache?: CacheInstance } = {},
+): Promise<ResponseInit<T, U>> {
   prepareOptions(options, init);
 
   const maxConcurrent = init.maxConcurrentRequests ?? 250;
@@ -39,18 +43,18 @@ export default async function Http<T = any>(
     if (cached != null) {
       try {
         const ts = performance.now();
-        const { finalUrl, body } = extractFinalUrl(cached);
-        const resp = ProcessResponse(
-          finalUrl || url,
-          body,
+        const resp = processAndBuild<T, U>(
+          url,
+          cached,
           ts,
           options.parseJSON!,
           true,
+          options,
+          init,
         );
-        const built = BuildResponse<T>(resp, options, init);
         return options.transformResponse
-          ? options.transformResponse(built)
-          : built;
+          ? options.transformResponse(resp)
+          : resp;
       } catch {
         console.warn(
           `[BunCurl2] - Corrupted cache entry, skipping [${cacheKey}]`,
@@ -63,10 +67,9 @@ export default async function Http<T = any>(
   let proc: Bun.Subprocess | undefined;
   try {
     const tsStart = performance.now();
-    const cmd = await BuildCommand<T>(new URL(url), options, init);
+    const cmd = await BuildCommand<T, U>(new URL(url), options, init);
     proc = Bun.spawn(cmd, { stdout: 'pipe', stderr: 'pipe' });
 
-    // helper to narrow proc.stdout into a ReadableStream<Uint8Array>
     const stdoutPromise = (async () => {
       if (!proc!.stdout) throw new Error('[BunCurl2] - Missing stdout');
       const outStream =
@@ -130,24 +133,24 @@ export default async function Http<T = any>(
       });
     }
 
-    const { finalUrl, body } = extractFinalUrl(stdout);
-    const resp = ProcessResponse(
-      finalUrl || url,
-      body,
+    const resp = processAndBuild<T, U>(
+      url,
+      stdout,
       tsStart,
       options.parseJSON!,
       false,
+      options,
+      init,
     );
-    const builtRes = BuildResponse<T>(resp, options, init);
 
     if (cacheKey && cacheServer && typeof options.cache === 'object') {
       if (
         typeof options.cache.validate === 'function' &&
-        !(await options.cache.validate(builtRes))
+        !(await options.cache.validate(resp))
       ) {
         return options.transformResponse
-          ? options.transformResponse(builtRes)
-          : builtRes;
+          ? options.transformResponse(resp)
+          : resp;
       }
 
       const expire =
@@ -173,25 +176,23 @@ export default async function Http<T = any>(
       }
     }
 
-    return options.transformResponse
-      ? options.transformResponse(builtRes)
-      : builtRes;
+    return options.transformResponse ? options.transformResponse(resp) : resp;
   } finally {
     concurrentRequests--;
   }
 }
 
-async function getCacheKey<T>(
+async function getCacheKey<T, U extends boolean>(
   url: string,
-  options: RequestInit<T>,
+  options: RequestInit<T, U>,
 ): Promise<string> {
   if (typeof options.cache === 'object' && options.cache.generate)
     return options.cache.generate({ url, ...options });
   return generateCacheKey(url, options);
 }
 
-function prepareOptions<T>(
-  options: RequestInit<T>,
+function prepareOptions<T, U extends boolean>(
+  options: RequestInit<T, U>,
   init: GlobalInit & { cache?: CacheInstance },
 ) {
   options.parseJSON = options.parseJSON ?? init.parseJSON ?? true;
@@ -206,7 +207,10 @@ function prepareOptions<T>(
     init.cache.defaultExpiration = init.cache.defaultExpiration ?? 5;
 }
 
-function generateCacheKey<T>(url: string, options: RequestInit<T>): string {
+function generateCacheKey<T, U extends boolean>(
+  url: string,
+  options: RequestInit<T, U>,
+): string {
   const fields: CacheKeys[] = ['url', 'headers', 'body', 'proxy', 'method'];
   const keys =
     !options.cache ||
@@ -219,9 +223,9 @@ function generateCacheKey<T>(url: string, options: RequestInit<T>): string {
   return md5(`BunCurl2|${serialized.join('|')}`);
 }
 
-function serializeField<T>(
+function serializeField<T, U extends boolean>(
   key: CacheKeys,
-  options: RequestInit<T>,
+  options: RequestInit<T, U>,
   url: string,
 ): string {
   let val: unknown = key === 'url' ? url : (options as any)[key];

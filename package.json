@@ -1,6 +1,6 @@
 {
   "name": "bun-curl2",
-  "version": "0.0.33-dev.2",
+  "version": "0.0.33-dev.3",
   "author": {
     "name": "Nicholas",
     "url": "https://github.com/Aslarex",
@@ -20,7 +20,7 @@
   "description": "blazing fast, fetch-like HTTP client built with Bun and cURL in TypeScript.",
   "license": "WTFPL",
   "scripts": {
-    "dev": "DEBUG=* bun test --watch",
+    "dev": "DEBUG=* bun test --watch --timeout 15000",
     "build": "rm -rf dist && tsc --project tsconfig.json && esbuild --minify $(find ./dist -type f -name '*.js') --outdir=dist --tree-shaking=true --allow-overwrite --format=esm && find ./dist -type f -empty -delete",
     "prettier": "prettier src/ tests/ examples/ --write"
   },
