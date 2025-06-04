@@ -6,41 +6,46 @@ type CacheValue<T> = {
 type Options = {
   maxItems?: number;
   noInterval?: boolean;
+  cleanupIntervalMs?: number;
 };
 
-export class LocalCache<T = any> {
+export default class TTLCache<T = any> {
   private data: Map<string, CacheValue<T>>;
-  private cleanupInterval: ReturnType<typeof setInterval> | undefined;
+  private cleanupHandle: ReturnType<typeof setInterval> | undefined;
 
   constructor(private options?: Options) {
     this.data = new Map();
+
     if (!options?.noInterval) {
-      this.cleanupInterval = setInterval(() => this.cleanup(), 60 * 1000);
+      const interval = options?.cleanupIntervalMs ?? 60_000;
+      this.cleanupHandle = setInterval(() => this.cleanup(), interval);
     }
   }
 
   /**
-   * Stores a value with the given TTL (in seconds).
+   * Stores a value with the given TTL (in milliseconds).
    */
-  set(key: string, value: T, ttl: number): void {
+  set(key: string, value: T, ttlMs: number): void {
     if (this.options?.maxItems && this.data.size >= this.options.maxItems) {
-      const key = [...this.data.keys()].pop();
-      key && this.data.delete(key);
+      const oldestKey = [...this.data.keys()].pop();
+      oldestKey && this.data.delete(oldestKey);
     }
-    const expiresAt = Date.now() + ttl * 1000;
+    const expiresAt = Date.now() + ttlMs;
     this.data.set(key, { value, expiresAt });
   }
 
   /**
-   * Returns the value if it exists and is not expired, otherwise undefined.
+   * Returns the value if it exists and is not expired; otherwise returns null.
    */
   get(key: string): T | null {
     const entry = this.data.get(key);
     if (!entry) return null;
-    if (Date.now() > entry.expiresAt) {
+
+    if (Date.now() >= entry.expiresAt) {
       this.data.delete(key);
       return null;
     }
+
     return entry.value;
   }
 
@@ -50,10 +55,12 @@ export class LocalCache<T = any> {
   has(key: string): boolean {
     const entry = this.data.get(key);
     if (!entry) return false;
-    if (Date.now() > entry.expiresAt) {
+
+    if (Date.now() >= entry.expiresAt) {
       this.data.delete(key);
       return false;
     }
+
     return true;
   }
 
@@ -72,10 +79,13 @@ export class LocalCache<T = any> {
   }
 
   /**
-   * Destroys interval & clears the cache entries
+   * Stops the cleanup interval (if running) and clears the cache entries.
    */
   end(): void {
-    this.cleanupInterval && clearInterval(this.cleanupInterval);
+    if (this.cleanupHandle) {
+      clearInterval(this.cleanupHandle);
+      this.cleanupHandle = undefined;
+    }
     this.data.clear();
   }
 
@@ -85,7 +95,7 @@ export class LocalCache<T = any> {
   private cleanup(): void {
     const now = Date.now();
     for (const [key, entry] of this.data.entries()) {
-      if (now > entry.expiresAt) {
+      if (now >= entry.expiresAt) {
         this.data.delete(key);
       }
     }

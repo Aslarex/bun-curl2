@@ -8,8 +8,8 @@ test('body', async () => {
   const blob = new Blob([fileContent], { type: 'text/plain' });
   formData.append('test_file', blob, 'hello.txt');
 
-  const test_formData = await fetch<{ files: Record<'test_file', string> }>(
-    'https://httpbin.org/anything',
+  const test_formData = await fetch<{ files: Record<'test_file', [string]> }>(
+    'https://httpbingo.org/anything',
     {
       body: formData,
     },
@@ -24,7 +24,7 @@ test('body', async () => {
   });
 
   const test_stream = await fetch<{ data: string }>(
-    'https://httpbin.org/anything',
+    'https://httpbingo.org/anything',
     {
       method: 'POST',
       body: stream,
@@ -37,7 +37,7 @@ test('body', async () => {
   const params = new URLSearchParams({ foo: 'bar', baz: 'qux' });
 
   const test_params = await fetch<{ form: Record<string, any> }>(
-    'https://httpbin.org/anything',
+    'https://httpbingo.org/anything',
     {
       method: 'POST',
       body: params,
@@ -45,10 +45,10 @@ test('body', async () => {
   );
 
   expect(JSON.stringify(test_params.response.form)).toBe(
-    JSON.stringify({ baz: 'qux', foo: 'bar' }),
-  ); // httpbin returns form in incorrect order for some reason
+    JSON.stringify({ baz: ['qux'], foo: ['bar'] }),
+  );
 
   expect(test_stream.response.data).toBe('Hello, world!');
 
-  expect(test_formData.response.files.test_file).toBe(fileContent);
+  expect(test_formData.response.files.test_file).toMatchObject([fileContent]);
 });

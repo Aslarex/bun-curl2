@@ -8,7 +8,7 @@ import type {
 import BuildCommand from './command';
 import { processAndBuild } from './response';
 import { hasJsonStructure, md5 } from '../models/utils';
-import { LocalCache } from './cache';
+import TTLCache from './cache';
 import { RedisClient } from 'bun';
 
 let concurrentRequests = 0;
@@ -64,34 +64,28 @@ export default async function Http<T = any, U extends boolean = false>(
   }
 
   concurrentRequests++;
-  let proc: Bun.Subprocess | undefined;
+  let proc: Bun.Subprocess<"pipe", "pipe", "pipe">;
   try {
     const tsStart = performance.now();
     const cmd = await BuildCommand<T, U>(new URL(url), options, init);
     proc = Bun.spawn(cmd, { stdout: 'pipe', stderr: 'pipe' });
 
     const stdoutPromise = (async () => {
-      if (!proc!.stdout) throw new Error('[BunCurl2] - Missing stdout');
-      const outStream =
-        typeof proc!.stdout === 'number'
-          ? Bun.file(proc!.stdout, { type: 'stream' }).stream()
-          : proc!.stdout;
-      const buf = await new Response(
-        outStream as ReadableStream<Uint8Array>,
-      ).arrayBuffer();
+      if (!proc.stdout) throw new Error('[BunCurl2] - Missing stdout');
+      const buf = await new Response(proc.stdout).arrayBuffer();
       return Buffer.from(buf).toString('binary');
     })();
 
     const abortPromise = new Promise<never>((_, reject) => {
       if (options.signal) {
         if (options.signal.aborted) {
-          proc!.kill();
+          proc.kill();
           reject(new DOMException('The operation was aborted.', 'AbortError'));
         } else {
           options.signal.addEventListener(
             'abort',
             () => {
-              proc!.kill();
+              proc.kill();
               reject(
                 new DOMException('The operation was aborted.', 'AbortError'),
               );
@@ -106,7 +100,7 @@ export default async function Http<T = any, U extends boolean = false>(
     try {
       stdout = await Promise.race([stdoutPromise, abortPromise]);
     } catch (err) {
-      await proc!.exited;
+      await proc.exited;
       throw err;
     }
 
@@ -114,14 +108,8 @@ export default async function Http<T = any, U extends boolean = false>(
 
     if (proc.exitCode !== 0) {
       const stderrData = await (async () => {
-        if (!proc!.stderr) throw new Error('[BunCurl2] - Missing stderr');
-        const errStream =
-          typeof proc!.stderr === 'number'
-            ? Bun.file(proc!.stderr, { type: 'stream' }).stream()
-            : proc!.stderr;
-        const buf = await new Response(
-          errStream as ReadableStream<Uint8Array>,
-        ).arrayBuffer();
+        if (!proc.stderr) throw new Error('[BunCurl2] - Missing stderr');
+        const buf = await new Response(proc.stderr).arrayBuffer();
         return Buffer.from(buf).toString('utf-8');
       })();
 
@@ -153,24 +141,23 @@ export default async function Http<T = any, U extends boolean = false>(
           : resp;
       }
 
-      const expire =
-        typeof options.cache.expire === 'number'
-          ? options.cache.expire
-          : init.cache!.defaultExpiration!;
+      const expireMs = (typeof options.cache.expire === 'number' ? options.cache.expire : init.cache!.defaultExpiration!) * 1e3;
 
-      if (cacheServer instanceof LocalCache) {
-        cacheServer.set(cacheKey, stdout, expire);
+      if (cacheServer instanceof TTLCache) {
+        cacheServer.set(cacheKey, stdout, expireMs);
       } else if (cacheServer instanceof RedisClient) {
+        // Bun checks by ">" operator instead of ">=" 
+        // So we substract 1ms from expiration time to make sure it matches the logic of redis package
         await cacheServer.send('SET', [
           cacheKey,
           stdout,
           'PX',
-          String(expire * 1000 - 5),
+          String(expireMs - 1),
           'NX',
         ]);
       } else {
         await cacheServer.set(cacheKey, stdout, {
-          expiration: { type: 'EX', value: expire },
+          expiration: { type: 'PX', value: expireMs },
           condition: 'NX',
         });
       }
@@ -195,14 +182,23 @@ function prepareOptions<T, U extends boolean>(
   options: RequestInit<T, U>,
   init: GlobalInit & { cache?: CacheInstance },
 ) {
+  options.dns = options.dns ?? {
+    cache: true,
+    servers: ['1.1.1.1']
+  };
   options.parseJSON = options.parseJSON ?? init.parseJSON ?? true;
   options.method = options.method ?? 'GET';
   options.compress = options.compress ?? init.compress ?? true;
   options.follow = options.follow ?? true;
   options.sortHeaders = options.sortHeaders ?? true;
-  init.tcp = init.tcp ?? {};
-  init.tcp.fastOpen = init.tcp.fastOpen ?? true;
-  init.tcp.noDelay = init.tcp.noDelay ?? true;
+  options.http = options.http ?? {
+    keepAlive: true,
+    keepAliveProbes: 3
+  };
+  init.tcp = init.tcp ?? {
+    fastOpen: true,
+    noDelay: true
+  };
   if (init.cache)
     init.cache.defaultExpiration = init.cache.defaultExpiration ?? 5;
 }

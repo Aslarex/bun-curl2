@@ -19,7 +19,7 @@ import type {
   CacheInstance,
 } from './types';
 import Headers from './models/headers';
-import { LocalCache } from './services/cache';
+import TTLCache from './services/cache';
 import { ResponseWrapper } from './services/response';
 import { DNS_CACHE_MAP, TLS } from './models/constants';
 import { compareVersions } from './models/utils';
@@ -89,7 +89,7 @@ export class BunCurl2<U extends boolean = false> {
       switch (cache.mode) {
         case 'local':
         case 'client':
-          this.cache.server = new LocalCache<string>();
+          this.cache.server = new TTLCache<string>();
           break;
         case 'redis':
           if (cache.server) {
@@ -161,7 +161,7 @@ export class BunCurl2<U extends boolean = false> {
     DNS_CACHE_MAP.end();
     if (!this.cache?.server) return;
     const server = this.cache.server;
-    if (server instanceof LocalCache) {
+    if (server instanceof TTLCache) {
       server.end();
     } else {
       'disconnect' in server ? await server.disconnect() : server.close();

@@ -1,19 +1,12 @@
 import * as crypto from 'crypto';
-import { PROTOCOL_PORTS } from './constants';
 
-/**
- * Helper: Determine if a string or object is a valid JSON structure (object or array).
- *
- * @param i - The string or object to test.
- * @returns {boolean} True if the input represents a JSON object or array, false otherwise.
- */
+/** Determine if a string or object is a valid JSON structure (object or array). */
 export function hasJsonStructure(i: string | object): boolean {
   let res: any;
   if (typeof i === 'string') {
     const str = i.trim();
     const firstChar = str[0];
     const lastChar = str[str.length - 1];
-    // If the string doesn't start and end with matching JSON brackets, return false.
     if (
       (firstChar !== '{' || lastChar !== '}') &&
       (firstChar !== '[' || lastChar !== ']')
@@ -28,7 +21,6 @@ export function hasJsonStructure(i: string | object): boolean {
   } else {
     res = i;
   }
-  // Check that the parsed value is either an object or an array.
   return (
     res !== null &&
     typeof res === 'object' &&
@@ -36,24 +28,16 @@ export function hasJsonStructure(i: string | object): boolean {
   );
 }
 
-/**
- * Helper: Determine Content-Type based on body content.
- *
- * @param body - The body string.
- * @returns {string} The determined Content-Type.
- */
+/** Determine Content-Type based on body content. */
 export function determineContentType(body: string): string {
   if (hasJsonStructure(body)) {
     return 'application/json';
   }
 
-  // Fast pre-check: if no '=' exists, it's unlikely to be URL-encoded.
   if (body.indexOf('=') === -1) return 'text/plain';
 
-  // Manually check that each ampersand-separated part contains an '='.
   const pairs = body.split('&');
   for (let i = 0, len = pairs.length; i < len; i++) {
-    // If any pair does not include '=', it's not properly URL-encoded.
     if (pairs[i].indexOf('=') === -1) return 'text/plain';
   }
   return 'application/x-www-form-urlencoded';
@@ -61,12 +45,6 @@ export function determineContentType(body: string): string {
 
 export function md5(str: string) {
   return crypto.createHash('md5').update(str).digest('hex');
-}
-
-export function getDefaultPort(protocol: string): number | undefined {
-  return PROTOCOL_PORTS[
-    protocol.toLowerCase().replaceAll(':', '').replaceAll('/', '')
-  ];
 }
 
 export function isValidIPv4(ip: string): boolean {
@@ -99,7 +77,12 @@ export function containsAlphabet(str: string): boolean {
   }
   return false;
 }
-
+/**
+ * Compare two version strings (e.g. "1.2.3" vs "1.4"):
+ * - returns 1 if v1 > v2
+ * - returns -1 if v1 < v2
+ * - returns 0 if they’re equal
+ */
 export function compareVersions(v1: string, v2: string): number {
   let i = 0,
     j = 0;
@@ -110,14 +93,11 @@ export function compareVersions(v1: string, v2: string): number {
     let num1 = 0,
       num2 = 0;
 
-    // Parse next number in v1
     while (i < len1 && v1.charAt(i) !== '.') {
-      // Assuming version strings are valid digits
       num1 = num1 * 10 + (v1.charCodeAt(i) - 48);
       i++;
     }
 
-    // Parse next number in v2
     while (j < len2 && v2.charAt(j) !== '.') {
       num2 = num2 * 10 + (v2.charCodeAt(j) - 48);
       j++;
@@ -126,7 +106,6 @@ export function compareVersions(v1: string, v2: string): number {
     if (num1 > num2) return 1;
     if (num1 < num2) return -1;
 
-    // Skip the '.' character
     i++;
     j++;
   }

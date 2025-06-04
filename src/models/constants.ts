@@ -1,5 +1,5 @@
 import { $ } from 'bun';
-import { LocalCache } from '../services/cache';
+import TTLCache from '../services/cache';
 
 // Define constants for CURL options.
 const CURL = {
@@ -69,29 +69,29 @@ const HTTP = {
   Version30: 3.0,
 } as const;
 
-const PROTOCOL_PORTS = {
-  http: 80,
-  https: 443,
-  ftp: 21,
-  ftps: 990,
-  sftp: 22,
-  scp: 22,
-  smtp: 25,
-  smtps: 465,
-  imap: 143,
-  imaps: 993,
-  pop3: 110,
-  pop3s: 995,
-  ldap: 389,
-  ldaps: 636,
-  mqtt: 1883,
-  mqtts: 8883,
-  telnet: 23,
-  tftp: 69,
-  rtsp: 554,
-  smb: 445,
-  dict: 2628,
-} as Record<string, number>;
+const PROTOCOL_PORTS: Record<string, number> = {
+  'http:': 80,
+  'https:': 443,
+  'ftp:': 21,
+  'ftps:': 990,
+  'sftp:': 22,
+  'scp:': 22,
+  'smtp:': 25,
+  'smtps:': 465,
+  'imap:': 143,
+  'imaps:': 993,
+  'pop3:': 110,
+  'pop3s:': 995,
+  'ldap:': 389,
+  'ldaps:': 636,
+  'mqtt:': 1883,
+  'mqtts:': 8883,
+  'telnet:': 23,
+  'tftp:': 69,
+  'rtsp:': 554,
+  'smb:': 445,
+  'dict:': 2628,
+};
 
 const CURL_OUTPUT = (await $`curl --version`.quiet().text()).toLowerCase();
 
@@ -99,10 +99,7 @@ const curlVersionMatch = CURL_OUTPUT.match(/curl\s+(\d+.\d+.\d+)/);
 
 const CURL_VERSION = curlVersionMatch ? curlVersionMatch[1] : '0.0.0';
 
-const DNS_CACHE_MAP = new LocalCache<string>({
-  maxItems: 255,
-  noInterval: true,
-});
+const DNS_CACHE_MAP = new TTLCache<string>({ maxItems: 255 });
 
 export {
   CURL,

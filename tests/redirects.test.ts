@@ -18,13 +18,13 @@ const clientWithRedirectObjects = new BunCurl2({
 
 test('redirects test', async () => {
   const desiredChainForUrls = [
-    'https://httpbin.org/relative-redirect/2',
-    'https://httpbin.org/relative-redirect/1',
-    'https://httpbin.org/get',
+    'https://httpbingo.org/relative-redirect/2',
+    'https://httpbingo.org/relative-redirect/1',
+    'https://httpbingo.org/get',
   ];
 
   const urls = await clientWithRedirectUrls.get(
-    'https://httpbin.org/redirect/3',
+    'https://httpbingo.org/redirect/3',
   );
 
   // @ts-check
@@ -37,13 +37,13 @@ test('redirects test', async () => {
   // As we can still see the redirect URL in "location" header :)
 
   const desiredChainForObjects = [
-    'https://httpbin.org/redirect/3',
-    'https://httpbin.org/relative-redirect/2',
-    'https://httpbin.org/relative-redirect/1',
+    'https://httpbingo.org/redirect/3',
+    'https://httpbingo.org/relative-redirect/2',
+    'https://httpbingo.org/relative-redirect/1',
   ];
 
   const objects = await clientWithRedirectObjects.get(
-    'https://httpbin.org/redirect/3',
+    'https://httpbingo.org/redirect/3',
   );
 
   // @ts-check

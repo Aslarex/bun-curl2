@@ -3,13 +3,12 @@ import { expect, test } from 'bun:test';
 
 const Client = new BunCurl2({
   cache: {
-    mode: 'redis',
-    useRedisPackage: false,
+    mode: 'local',
   },
 });
 
 test('cache', async () => {
-  await Client.connect();
+  Client.connect();
 
   const ShouldNotCache = await Client.get('https://www.example.com', {
     cache: {
@@ -28,7 +27,7 @@ test('cache', async () => {
   const CacheRequest = await Client.get('https://www.example.com', {
     cache: {
       validate: async () => true,
-      expire: 1,
+      expire: 1.5, // 1.5s -> 1500ms
     },
     parseJSON: false,
   });
@@ -38,7 +37,7 @@ test('cache', async () => {
     parseJSON: false,
   });
 
-  await Bun.sleep(1000);
+  await Bun.sleep(1500);
 
   const ShouldBeExpired = await Client.get('https://www.example.com', {
     cache: true,

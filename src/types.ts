@@ -1,7 +1,7 @@
 import type { RedisClientOptions } from 'redis';
 import CustomHeaders from './models/headers';
 import { TLS } from './models/constants';
-import { LocalCache } from './services/cache';
+import TTLCache from './services/cache';
 import { RedisClient, RedisOptions } from 'bun';
 /**
  * Represents a connection to a Redis server and provides basic operations.
@@ -93,7 +93,7 @@ type RedisCache =
 type CacheType = RedisCache | (BaseCache & { mode?: 'local' | 'client' });
 
 type CacheInstance = {
-  server: RedisServer | RedisClient | LocalCache<string>;
+  server: RedisServer | RedisClient | TTLCache<string>;
   defaultExpiration?: number;
 };
 
@@ -107,7 +107,7 @@ type GlobalInit = {
    * @param args - The initial RequestInit object.
    * @returns A transformed RequestInit object.
    */
-  transformRequest?: <T, U extends boolean>(
+  transformRequest?: <T, U extends boolean = false>(
     args: RequestInitWithURL<T, U>,
   ) => RequestInit<T, U>;
 
@@ -212,7 +212,7 @@ interface Connection {
     /**
      * HTTP protocol version.
      */
-    version: 3.0 | 2.0 | 1.1;
+    version?: 3.0 | 2.0 | 1.1;
     /**
      * The keep-alive setting for the connection (HTTP/1.1).
      *
@@ -249,6 +249,7 @@ export type RequestInitWithURL<
  * Extra options to enhance request and response handling.
  *
  * @template T - The type of data expected in the request or response.
+ * @template U - If redirects property should have a type of string[]
  */
 interface ExtraOptions<T, U extends boolean> {
   /**
@@ -287,6 +288,8 @@ interface ExtraOptions<T, U extends boolean> {
     | {
         /**
          * The expiration time for the cache entry in seconds.
+         * 
+         * Supports decimal numbers.
          */
         expire?: number;
         /**
@@ -331,8 +334,8 @@ interface ExtraOptions<T, U extends boolean> {
      *
      * Provide `false` if you want to disable DNS caching for following hostname.
      *
-     * If the value is `true`, cache will last for 30 seconds.
-     * @default false
+     * If the value is `true`, cache will last for 300 seconds.
+     * @default true
      */
     cache?: number | boolean;
     /**

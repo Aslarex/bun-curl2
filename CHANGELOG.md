@@ -2,6 +2,14 @@
 
 > **Note:** Dates are formatted as `yyyy-mm-dd`.
 
+## [0.0.34] - 2025-06-04 (Minor update)
+
+> ⚠️ **WARNING:** Upgrade **Bun** to `1.2.16-canary.57+ce8767cdc` or later to resolve memory leak(s)
+
+- **Change:** DNS caching locally is turned on by default again (previously every request performed a fresh DNS lookup).
+- **New:** Cache expiration time now supports decimal numbers.
+- **Optimization:** Little cleanup and more optimizations.
+
 ## [0.0.33] - 2025-05-29 
 
 > ⚠️ **WARNING:** Before upgrading, **clear your Redis cache** — any previously cached requests may not be parsed correctly.
