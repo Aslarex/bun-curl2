@@ -4,8 +4,8 @@ import { fetch } from '../src';
 test('body', async () => {
   const formData = new FormData();
   // Create a Blob to simulate a file.
-  const fileContent = 'Hello, world!';
-  const blob = new Blob([fileContent], { type: 'text/plain' });
+  const fileContent = 'Hello, world! 😀';
+  const blob = new Blob([fileContent], { type: 'text/plain; charset=utf-8' });
   formData.append('test_file', blob, 'hello.txt');
 
   const test_formData = await fetch<{ files: Record<'test_file', [string]> }>(
@@ -18,7 +18,7 @@ test('body', async () => {
   const stream = new ReadableStream({
     start(controller) {
       controller.enqueue(new TextEncoder().encode('Hello, '));
-      controller.enqueue(new TextEncoder().encode('world!'));
+      controller.enqueue(new TextEncoder().encode('world! 😀'));
       controller.close();
     },
   });
@@ -48,7 +48,7 @@ test('body', async () => {
     JSON.stringify({ baz: ['qux'], foo: ['bar'] }),
   );
 
-  expect(test_stream.response.data).toBe('Hello, world!');
+  expect(test_stream.response.data).toBe('Hello, world! 😀');
 
   expect(test_formData.response.files.test_file).toMatchObject([fileContent]);
 });

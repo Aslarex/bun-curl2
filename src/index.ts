@@ -52,9 +52,9 @@ export {
  * BunCurl2 provides a high-level HTTP client with caching support.
  *
  * @example
- * const bunCurl = new BunCurl2({ cache: { mode: 'local' } });
- * await bunCurl.initializeCache();
- * const response = await bunCurl.get('https://example.com');
+ * const client = new BunCurl2({ cache: { mode: 'local' } });
+ * client.connect();
+ * const response = await client.get('https://example.com');
  */
 export class BunCurl2<U extends boolean = false> {
   /**
@@ -100,7 +100,7 @@ export class BunCurl2<U extends boolean = false> {
             if (cache.useRedisPackage || !isBunClientSupported) {
               if (!isBunClientSupported)
                 console.warn(
-                  '⚠️ [BunCurl2] - Detected Bun version does not supported redis client API implemented by them, fallbacking to redis package',
+                  '⚠️ [BunCurl2] - Detected Bun version does not support redis client API implemented by them, fallbacking to redis package',
                 );
               const { createClient } = await import('redis');
               this.cache.server = createClient(
