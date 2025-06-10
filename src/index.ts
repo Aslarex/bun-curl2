@@ -21,7 +21,7 @@ import type {
 import Headers from './models/headers';
 import TTLCache from './services/cache';
 import { ResponseWrapper } from './services/response';
-import { DNS_CACHE_MAP, TLS } from './models/constants';
+import { DNS_CACHE as DNSCache, TLS } from './models/constants';
 import { compareVersions } from './models/utils';
 import { RedisOptions } from 'bun';
 
@@ -35,7 +35,7 @@ export type {
   RedisServer,
   BaseRequestInit,
   BaseCache,
-  CacheKeys,
+  CacheKeys
 };
 
 export {
@@ -46,6 +46,7 @@ export {
   Headers,
   ResponseWrapper,
   TLS,
+  DNSCache
 };
 
 /**
@@ -158,7 +159,7 @@ export class BunCurl2<U extends boolean = false> {
    * Destroys the `BunCurl2` client.
    */
   async destroy() {
-    DNS_CACHE_MAP.end();
+    DNSCache.end();
     if (!this.cache?.server) return;
     const server = this.cache.server;
     if (server instanceof TTLCache) {

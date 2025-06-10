@@ -16,7 +16,7 @@ const clientWithRedirectObjects = new BunCurl2({
   redirectsAsUrls: false,
 });
 
-test('redirects test', async () => {
+test('redirects', async () => {
   const desiredChainForUrls = [
     'https://httpbingo.org/relative-redirect/2',
     'https://httpbingo.org/relative-redirect/1',

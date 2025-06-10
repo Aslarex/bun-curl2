@@ -184,7 +184,7 @@ function prepareOptions<T, U extends boolean>(
 ) {
   options.dns = options.dns ?? {
     cache: true,
-    servers: ['1.1.1.1']
+    servers: ['1.1.1.1', '1.0.0.1']
   };
   options.parseJSON = options.parseJSON ?? init.parseJSON ?? true;
   options.method = options.method ?? 'GET';

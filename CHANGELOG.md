@@ -2,6 +2,11 @@
 
 > **Note:** Dates are formatted as `yyyy-mm-dd`.
 
+## [0.0.35] – 2025-06-11 (Minor update)
+
+- **Fix**: `GlobalInit.transformRequest` used to apply even when `RequestInit.transformRequest` was `false`.
+- **Optimization**: More efficient construction of command and response headers.
+
 ## [0.0.34] - 2025-06-04 (Minor update)
 
 > ⚠️ **WARNING:** Upgrade **Bun** to `1.2.16-canary.57+ce8767cdc` or later to resolve memory leak(s)

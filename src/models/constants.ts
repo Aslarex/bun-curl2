@@ -99,7 +99,7 @@ const curlVersionMatch = CURL_OUTPUT.match(/curl\s+(\d+.\d+.\d+)/);
 
 const CURL_VERSION = curlVersionMatch ? curlVersionMatch[1] : '0.0.0';
 
-const DNS_CACHE_MAP = new TTLCache<string>({ maxItems: 255 });
+const DNS_CACHE = new TTLCache<string>({ maxItems: 255 });
 
 export {
   CURL,
@@ -108,5 +108,5 @@ export {
   CURL_OUTPUT,
   TLS,
   HTTP,
-  DNS_CACHE_MAP,
+  DNS_CACHE,
 };

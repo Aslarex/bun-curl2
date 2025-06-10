@@ -53,9 +53,7 @@ interface RedisServer {
   isOpen: boolean;
 }
 
-/**
- * Base configuration for caching mechanisms.
- */
+
 interface BaseCache {
   /**
    * The default expiration time for cached entries in seconds.
@@ -412,8 +410,7 @@ interface RequestInit<T = any, U extends boolean = false>
 /**
  * Represents an HTTP response with additional metadata.
  *
- * @template T - The type of the response data.
- */
+*/
 interface ResponseInit<T = any, U extends boolean = false> {
   /**
    * The response payload.

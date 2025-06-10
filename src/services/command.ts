@@ -6,7 +6,7 @@ import {
   CURL_VERSION,
   CURL_OUTPUT,
   TLS,
-  DNS_CACHE_MAP,
+  DNS_CACHE,
   HTTP,
   PROTOCOL_PORTS,
 } from '../models/constants';
@@ -185,7 +185,7 @@ async function buildDNSOptions<T, U extends boolean>(
 
   if (dnsOpts.cache && SUPPORTS.DNS_RESOLVE && containsAlphabet(url.host)) {
     let resolveIP = dnsOpts.resolve;
-    const cached = DNS_CACHE_MAP.get(url.host);
+    const cached = DNS_CACHE.get(url.host);
 
     if (!resolveIP) {
       if (cached) {
@@ -201,7 +201,7 @@ async function buildDNSOptions<T, U extends boolean>(
 
     if (resolveIP && isValidIPv4(resolveIP)) {
       if (!cached) {
-        DNS_CACHE_MAP.set(
+        DNS_CACHE.set(
           url.host,
           resolveIP,
           typeof dnsOpts.cache === 'number' ? dnsOpts.cache : 30,
@@ -228,7 +228,7 @@ export default async function BuildCommand<T, U extends boolean>(
   const tr2 = init.transformRequest;
   if (typeof tr1 === 'function') {
     options = tr1({ url: urlStr, ...options }) as RequestInit<T, U>;
-  } else if (typeof tr2 === 'function') {
+  } else if (typeof tr2 === 'function' && tr1 !== false) {
     options = tr2({ url: urlStr, ...options }) as RequestInit<T, U>;
   }
 
