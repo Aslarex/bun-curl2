@@ -10,6 +10,7 @@ import { processAndBuild } from './response';
 import { hasJsonStructure, md5 } from '../models/utils';
 import TTLCache from './cache';
 import { RedisClient } from 'bun';
+import { TLS } from '../models/constants';
 
 let concurrentRequests = 0;
 
@@ -185,6 +186,13 @@ function prepareOptions<T, U extends boolean>(
   options.dns = options.dns ?? {
     cache: true,
     servers: ['1.1.1.1', '1.0.0.1']
+  };
+  options.tls = options.tls ?? {
+    versions: [TLS.Version13, TLS.Version12],
+    ciphers: {
+      DEFAULT: 'TLS_ECDHE_RSA_WITH_AES_128_GCM_SHA256',
+      TLS13: 'TLS_AES_128_GCM_SHA256'
+    }
   };
   options.parseJSON = options.parseJSON ?? init.parseJSON ?? true;
   options.method = options.method ?? 'GET';

@@ -19,6 +19,7 @@ export default class TTLCache<T = any> {
     if (!options?.noInterval) {
       const interval = options?.cleanupIntervalMs ?? 60_000;
       this.cleanupHandle = setInterval(() => this.cleanup(), interval);
+      this.cleanupHandle.unref();
     }
   }
 

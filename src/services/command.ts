@@ -22,8 +22,6 @@ import { sortHeaders } from '../models/headers';
 
 const encoder = new TextEncoder();
 
-const headerCache = new WeakMap<any, [string, string][]>();
-
 const BASE_CURL_FLAGS = [CURL.BASE, CURL.INFO, CURL.SILENT, CURL.SHOW_ERROR] as const;
 
 const SUPPORTS = {
@@ -107,9 +105,6 @@ async function prepareRequestBody(body: unknown) {
 function prepareHeaders(headers: RequestInit['headers'], sort: boolean): [string, string][] {
   if (!headers) return [];
 
-  const cached = headerCache.get(headers);
-  if (cached) return cached;
-
   let result: [string, string][];
   if (sort) {
     result = sortHeaders(headers);
@@ -121,7 +116,6 @@ function prepareHeaders(headers: RequestInit['headers'], sort: boolean): [string
     result = Object.entries(headers).map(([k, v]) => [k, String(v)]);
   }
 
-  headerCache.set(headers, result);
   return result;
 }
 

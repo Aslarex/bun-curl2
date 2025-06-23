@@ -1,6 +1,6 @@
 # BunCurl2 🚀
 
-BunCurl2 is a **super-fast, fetch-like HTTP client** for [Bun](https://bun.sh)! Built and maintained as a solo project, it leverages Bun’s powerful child processes combined with cURL to deliver blazing performance, advanced TLS options, and flexible caching solutions. Redis caching is enabled by default, but you can also opt for local, memory-based caching using JavaScript's built-in Map object.
+BunCurl2 is a **super-fast, fetch-like HTTP client** for [Bun](https://bun.sh)! Built and maintained as a solo project, it leverages Bun’s powerful child processes combined with cURL to deliver blazing performance, advanced TLS options, and flexible caching solutions.
 
 ---
 
@@ -19,8 +19,6 @@ BunCurl2 is a **super-fast, fetch-like HTTP client** for [Bun](https://bun.sh)! 
   - **Optional:** Local, memory-based caching using JavaScript's Map object, suitable for short-term caching within the same process.
 - **Type-Safe Requests & Responses:**  
   Enjoy clear and maintainable TypeScript typings.
-- **Custom Transformations:**  
-  Modify and tailor requests and responses according to your needs.
 
 ---
 
