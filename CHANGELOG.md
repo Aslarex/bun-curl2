@@ -2,6 +2,12 @@
 
 > **Note:** Dates are formatted as `yyyy-mm-dd`.
 
+## [0.0.37] - 2025-07-16
+
+- **New:** Streaming response is now supported, either  use `RequestInit.stream` option or `BunCurl2.stream` method.
+- **New:** You can now change request url in `transformRequest` middleware
+- **Fix:** `ResponseInit.options` not reflecting outcome of `transformRequest` middleware
+
 ## [0.0.35] – 2025-06-11 (Minor update)
 
 - **Fix**: `GlobalInit.transformRequest` used to apply even when `RequestInit.transformRequest` was `false`.

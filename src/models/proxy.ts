@@ -3,7 +3,7 @@ const PORT_REGEX = /^[0-9]+$/;
 
 export default function formatProxyString(
   input: string,
-  protocolOverride?: string
+  protocolOverride?: string,
 ): string {
   let protocol = protocolOverride ?? 'http';
   const protoSep = input.indexOf('://');
@@ -31,7 +31,8 @@ export default function formatProxyString(
     user = creds.slice(0, sep);
     pass = creds.slice(sep + 1);
     if (!user || !pass) throw new Error(`Invalid credentials: "${creds}"`);
-    if (parts.length !== 2) throw new Error(`Invalid proxy format: expected host:port after "@"`);
+    if (parts.length !== 2)
+      throw new Error(`Invalid proxy format: expected host:port after "@"`);
     [host, port] = parts;
   } else if (parts.length === 2) {
     [host, port] = parts;
@@ -41,13 +42,14 @@ export default function formatProxyString(
   } else {
     throw new Error(
       `Bad proxy format: "${input}". ` +
-      `Use "ip:port", "ip:port:user:pass", or "user:pass@ip:port".`
+        `Use "ip:port", "ip:port:user:pass", or "user:pass@ip:port".`,
     );
   }
 
   if (!HOST_REGEX.test(host)) throw new Error(`Invalid host: "${host}"`);
   const portNum = +port;
-  if (!PORT_REGEX.test(port) || portNum < 1 || portNum > 65535) throw new Error(`Invalid port: "${port}"`);
+  if (!PORT_REGEX.test(port) || portNum < 1 || portNum > 65535)
+    throw new Error(`Invalid port: "${port}"`);
 
   const auth = user && pass ? `${user}:${pass}@` : '';
   return `${protocol}://${auth}${host}:${port}`;

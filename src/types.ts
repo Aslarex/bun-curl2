@@ -53,7 +53,6 @@ interface RedisServer {
   isOpen: boolean;
 }
 
-
 interface BaseCache {
   /**
    * The default expiration time for cached entries in seconds.
@@ -286,7 +285,7 @@ interface ExtraOptions<T, U extends boolean> {
     | {
         /**
          * The expiration time for the cache entry in seconds.
-         * 
+         *
          * Supports decimal numbers.
          */
         expire?: number;
@@ -394,6 +393,12 @@ interface BaseRequestInit {
    * An AbortSignal to set request's signal.
    */
   signal?: AbortSignal;
+
+  /** Toggle response body streaming
+   *
+   * ⚠️ Caching does not work if streaming is enabled
+   */
+  stream?: boolean;
 }
 
 /**
@@ -410,7 +415,7 @@ interface RequestInit<T = any, U extends boolean = false>
 /**
  * Represents an HTTP response with additional metadata.
  *
-*/
+ */
 interface ResponseInit<T = any, U extends boolean = false> {
   /**
    * The response payload.
@@ -470,9 +475,7 @@ interface ResponseInit<T = any, U extends boolean = false> {
    */
   redirected: boolean;
 
-  /**
-   * Redirect chain
-   */
+  /** Redirect chain */
   redirects: U extends true ? string[] : ResponseInit<T, false>[];
 
   /**

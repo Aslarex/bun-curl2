@@ -6,7 +6,6 @@ export type HeadersInit =
   | Iterable<readonly [string, string | number | string[]]>
   | Iterable<Iterable<string>>;
 
-
 const prioritizedOrderLookup: Record<string, number> = Object.freeze({
   accept: 0,
   'accept-charset': 1,
@@ -93,7 +92,7 @@ export default class CustomHeaders extends Headers {
 }
 
 export function sortHeaders(
-  inputHeaders: Exclude<RequestInit['headers'], undefined>
+  inputHeaders: Exclude<RequestInit['headers'], undefined>,
 ): [string, string][] {
   let arr: [string, string, string][];
 

@@ -1,4 +1,4 @@
-import type { GlobalInit, RequestInit } from '../types';
+import type { GlobalInit, RequestInit, RequestInitWithURL } from '../types';
 import { Buffer } from 'buffer';
 import { dns } from 'bun';
 import {
@@ -22,7 +22,12 @@ import { sortHeaders } from '../models/headers';
 
 const encoder = new TextEncoder();
 
-const BASE_CURL_FLAGS = [CURL.BASE, CURL.INFO, CURL.SILENT, CURL.SHOW_ERROR] as const;
+const BASE_CURL_FLAGS = [
+  CURL.BASE,
+  CURL.INFO,
+  CURL.SILENT,
+  CURL.SHOW_ERROR,
+] as const;
 
 const SUPPORTS = {
   HTTP2: CURL_OUTPUT.includes('http2'),
@@ -34,7 +39,8 @@ const SUPPORTS = {
 };
 
 async function buildMultipartBody(formData: FormData) {
-  const boundary = '----WebKitFormBoundary' + Math.random().toString(36).slice(2);
+  const boundary =
+    '----WebKitFormBoundary' + Math.random().toString(36).slice(2);
   const parts: Uint8Array[] = [];
 
   for (const [key, value] of formData.entries() as unknown as [string, any]) {
@@ -73,7 +79,11 @@ async function prepareRequestBody(body: unknown) {
     return { body: bd, type: `multipart/form-data; boundary=${boundary}` };
   }
 
-  if ((body as any) instanceof Blob || body instanceof ArrayBuffer || ArrayBuffer.isView(body)) {
+  if (
+    (body as any) instanceof Blob ||
+    body instanceof ArrayBuffer ||
+    ArrayBuffer.isView(body)
+  ) {
     const arr = (body as Blob).arrayBuffer
       ? await (body as Blob).arrayBuffer()
       : (body as ArrayBuffer);
@@ -102,7 +112,10 @@ async function prepareRequestBody(body: unknown) {
   return { body: str, type: determineContentType(str) };
 }
 
-function prepareHeaders(headers: RequestInit['headers'], sort: boolean): [string, string][] {
+function prepareHeaders(
+  headers: RequestInit['headers'],
+  sort: boolean,
+): [string, string][] {
   if (!headers) return [];
 
   let result: [string, string][];
@@ -119,7 +132,10 @@ function prepareHeaders(headers: RequestInit['headers'], sort: boolean): [string
   return result;
 }
 
-function buildTLSOptions<T, U extends boolean>(options: RequestInit<T, U>, cmd: string[]) {
+function buildTLSOptions<T, U extends boolean>(
+  options: RequestInit<T, U>,
+  cmd: string[],
+) {
   const tlsOpts = options.tls;
   if (!tlsOpts) return;
 
@@ -188,8 +204,7 @@ async function buildDNSOptions<T, U extends boolean>(
         try {
           const [rec] = await dns.lookup(url.host, { family: 4 });
           resolveIP = rec?.address;
-        } catch {
-        }
+        } catch {}
       }
     }
 
@@ -202,28 +217,32 @@ async function buildDNSOptions<T, U extends boolean>(
         );
       }
       const port = PROTOCOL_PORTS[url.protocol] ?? '443';
-      cmd.push(
-        CURL.DNS_RESOLVE,
-        `${url.host}:${port}:${resolveIP}`,
-      );
+      cmd.push(CURL.DNS_RESOLVE, `${url.host}:${port}:${resolveIP}`);
     }
   }
 }
 
 export default async function BuildCommand<T, U extends boolean>(
   url: URL,
-  optionsIn: RequestInit<T, U>,
+  options: RequestInit<T, U>,
   init: GlobalInit,
-): Promise<string[]> {
-  const urlStr = url.toString();
+): Promise<{ url: URL; cmd: string[] }> {
+  let urlStr = url.toString();
 
-  let options = optionsIn;
   const tr1 = options.transformRequest;
   const tr2 = init.transformRequest;
   if (typeof tr1 === 'function') {
-    options = tr1({ url: urlStr, ...options }) as RequestInit<T, U>;
+    const tr = tr1(
+      Object.assign(options, { url: urlStr }),
+    ) as RequestInitWithURL<T, U>;
+    url = new URL(tr.url);
+    urlStr = tr.url;
   } else if (typeof tr2 === 'function' && tr1 !== false) {
-    options = tr2({ url: urlStr, ...options }) as RequestInit<T, U>;
+    const tr = tr2(
+      Object.assign(options, { url: urlStr }),
+    ) as RequestInitWithURL<T, U>;
+    url = new URL(tr.url);
+    urlStr = tr.url;
   }
 
   const maxTime = options.maxTime ?? 10;
@@ -319,5 +338,5 @@ export default async function BuildCommand<T, U extends boolean>(
 
   cmd.push(urlStr.replace(/\[|\]/g, (c) => (c === '[' ? '%5B' : '%5D')));
 
-  return cmd;
+  return { url, cmd };
 }

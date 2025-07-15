@@ -25,22 +25,34 @@ export class ResponseWrapper<T, U extends boolean>
   ) {}
 
   json(): T {
+    if (this.options.stream) {
+      throw new Error('Response is a stream. Consume it directly.');
+    }
     return typeof this.response === 'string'
       ? JSON.parse(this.response)
       : this.response;
   }
 
   text(): string {
+    if (this.options.stream) {
+      throw new Error('Response is a stream. Consume it directly.');
+    }
     return typeof this.response === 'string'
       ? this.response
       : JSON.stringify(this.response);
   }
 
   arrayBuffer(): ArrayBuffer {
+    if (this.options.stream) {
+      throw new Error('Response is a stream. Consume it directly.');
+    }
     return Buffer.from(this.text(), 'binary').buffer;
   }
 
   blob(): Blob {
+    if (this.options.stream) {
+      throw new Error('Response is a stream. Consume it directly.');
+    }
     return new Blob([Buffer.from(this.text(), 'binary')]);
   }
 }

@@ -35,7 +35,7 @@ export type {
   RedisServer,
   BaseRequestInit,
   BaseCache,
-  CacheKeys
+  CacheKeys,
 };
 
 export {
@@ -46,7 +46,7 @@ export {
   Headers,
   ResponseWrapper,
   TLS,
-  DNSCache
+  DNSCache,
 };
 
 /**
@@ -174,15 +174,6 @@ export class BunCurl2<U extends boolean = false> {
    */
   disconnect = this.destroy;
 
-  /**
-   * Internal method to perform an HTTP request.
-   *
-   * @private
-   * @template T - The expected type of the response body.
-   * @param url - The URL to request.
-   * @param method - The HTTP method to use.
-   * @param options - Additional request options.
-   */
   private async request<T = any>(
     url: string,
     method: RequestInit['method'],
@@ -190,7 +181,7 @@ export class BunCurl2<U extends boolean = false> {
   ) {
     return HTTPRequest<T, U>(
       url,
-      { ...options, method },
+      { ...options, method, stream: false },
       { ...this.args, cache: this.cache },
     );
   }
@@ -285,6 +276,34 @@ export class BunCurl2<U extends boolean = false> {
     options?: Omit<RequestInit<T, U>, 'method' | 'body'>,
   ) {
     return this.request<T>(url, 'HEAD', options);
+  }
+
+  /**
+   * Performs a request that streams the response.
+   *
+   * @param url - The URL to request
+   * @param options - Request options excluding the `stream` property.
+   *
+   * @example
+   * const request = await client.stream("http://speed.transip.nl/10mb.bin");
+   * const reader = response.response.getReader();
+   * let receivedLength = 0;
+   * while (true) {
+   *   const { done, value } = await reader.read();
+   *   if (done) break;
+   *   receivedLength += value.length;
+   * }
+   *
+   * console.log('bytes:', receivedLength);
+   */
+  async stream(
+    url: string,
+    options?: Omit<
+      RequestInit<ReadableStream<Uint8Array<ArrayBufferLike>>>,
+      'stream'
+    >,
+  ): Promise<ResponseInit<ReadableStream<Uint8Array<ArrayBufferLike>>, true>> {
+    return HTTPRequest(url, { ...options, stream: true });
   }
 }
 
