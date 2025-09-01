@@ -24,6 +24,8 @@ const concurrentError = <T, U extends boolean>(
     { code: 'ERR_CONCURRENT_REQUESTS_REACHED', options: { ...options, url } },
   );
 
+const EMPTY = new Uint8Array(0);
+
 async function parseReader(
   stream: ReadableStream<Uint8Array>,
   originalUrl: string,
@@ -35,60 +37,73 @@ async function parseReader(
   redirects: string[];
 }> {
   const reader = stream.getReader();
-  const decoder = new TextDecoder('utf-8', { fatal: false });
-  let buffer = new Uint8Array(0);
+  const decoder = new TextDecoder('utf-8');
   const redirects: string[] = [];
   let currentUrl = originalUrl;
 
-  function indexOfDoubleCRLF(arr: Uint8Array): number {
-    for (let i = 0; i < arr.length - 3; i++) {
+  let buf = new Uint8Array(8192);
+  let len = 0;
+  let scanFrom = 0;
+
+  const ensure = (need: number) => {
+    if (buf.length - len >= need) return;
+    let cap = buf.length;
+    while (cap - len < need) cap *= 2;
+    const next = new Uint8Array(cap);
+    next.set(buf.subarray(0, len));
+    buf = next;
+  };
+
+  const findCRLFCRLF = (arr: Uint8Array, start: number): number => {
+    for (let i = start; i < arr.length - 3; i++) {
       if (
         arr[i] === 13 &&
         arr[i + 1] === 10 &&
         arr[i + 2] === 13 &&
         arr[i + 3] === 10
-      ) {
+      )
         return i;
-      }
     }
     return -1;
-  }
+  };
 
   while (true) {
-    while (true) {
-      const idx = indexOfDoubleCRLF(buffer);
-      if (idx !== -1) break;
-
+    let hdrEnd = findCRLFCRLF(buf.subarray(0, len), scanFrom);
+    while (hdrEnd === -1) {
       const { done, value } = await reader.read();
       if (done) throw new Error('Stream ended before headers finished');
-
-      const newBuffer = new Uint8Array(buffer.length + value.length);
-      newBuffer.set(buffer, 0);
-      newBuffer.set(value, buffer.length);
-      buffer = newBuffer;
+      ensure(value.length);
+      buf.set(value, len);
+      scanFrom = Math.max(0, len - 3);
+      len += value.length;
+      hdrEnd = findCRLFCRLF(buf.subarray(0, len), scanFrom);
     }
 
-    const headerEndIndex = indexOfDoubleCRLF(buffer);
-    const headerBytes = buffer.subarray(0, headerEndIndex);
-    const leftover = buffer.subarray(headerEndIndex + 4);
+    const headerBytes = buf.subarray(0, hdrEnd);
+    let leftover = buf.subarray(hdrEnd + 4, len);
 
-    const headerText = decoder.decode(headerBytes, { stream: true });
+    const headerText = decoder.decode(headerBytes);
     const lines = headerText.split('\r\n');
     const statusLine = lines.shift()!;
     const status = parseInt(statusLine.split(' ')[1], 10) || 0;
 
+    if (status >= 100 && status < 200) {
+      buf.copyWithin(0, hdrEnd + 4, len);
+      len = leftover.length;
+      scanFrom = 0;
+      continue;
+    }
+
     const headers: [string, string][] = [];
     let locationHeader: string | null = null;
-
     for (const line of lines) {
-      const colonIndex = line.indexOf(':');
-      if (colonIndex !== -1) {
-        const key = line.substring(0, colonIndex).trim();
-        const value = line.substring(colonIndex + 1).trim();
+      const idx = line.indexOf(':');
+      if (idx !== -1) {
+        const key = line.substring(0, idx).trim();
+        const value = line.substring(idx + 1).trim();
         headers.push([key, value]);
-        if (key.toLowerCase() === 'location') {
+        if ((key.length === 8 || key.length === 8 + 1) && key.toLowerCase() === 'location')
           locationHeader = value;
-        }
       }
     }
 
@@ -99,11 +114,13 @@ async function parseReader(
         currentUrl = locationHeader;
       }
       redirects.push(currentUrl);
-      buffer = leftover;
+      buf.copyWithin(0, hdrEnd + 4, len);
+      len = leftover.length;
+      scanFrom = 0;
       continue;
     }
 
-    return { status, headers, reader, leftover, redirects };
+    return { status, headers, reader, leftover: leftover.slice(), redirects };
   }
 }
 
@@ -126,11 +143,11 @@ export default async function Http<T = any, U extends boolean = false>(
 ): Promise<ResponseInit<any, U>> {
   prepareOptions(options, init);
 
-  const uriObj = new URL(url);
-
   const maxConcurrent = init.maxConcurrentRequests ?? 250;
   if (concurrentRequests >= maxConcurrent)
     throw concurrentError(maxConcurrent, options, url);
+
+  const uriObj = new URL(url);
 
   let cacheKey: string | undefined;
   const cacheServer = init.cache?.server;
@@ -150,14 +167,8 @@ export default async function Http<T = any, U extends boolean = false>(
           options,
           init,
         );
-        return options.transformResponse
-          ? options.transformResponse(resp)
-          : resp;
-      } catch {
-        console.warn(
-          `[BunCurl2] - Corrupted cache entry, skipping [${cacheKey}]`,
-        );
-      }
+        return options.transformResponse ? options.transformResponse(resp) : resp;
+      } catch {}
     }
   }
 
@@ -172,27 +183,76 @@ export default async function Http<T = any, U extends boolean = false>(
     if (options.stream) {
       if (!proc.stdout) throw new Error('[BunCurl2] - Missing stdout');
 
+      const drainStderr = (async () => {
+        if (!proc.stderr) return '';
+        const r = proc.stderr.getReader();
+        const cap = 65536;
+        const chunks: Uint8Array[] = [];
+        let total = 0;
+        try {
+          for (;;) {
+            const { done, value } = await r.read();
+            if (done) break;
+            if (value && value.length) {
+              chunks.push(value);
+              total += value.length;
+              while (total > cap) {
+                const first = chunks.shift()!;
+                total -= first.length;
+              }
+            }
+          }
+        } finally {
+          r.releaseLock();
+        }
+        const out = new Uint8Array(total);
+        let off = 0;
+        for (const c of chunks) {
+          out.set(c, off);
+          off += c.length;
+        }
+        return new TextDecoder('utf-8').decode(out);
+      })();
+
       let { status, headers, reader, leftover, redirects } = await parseReader(
         proc.stdout,
         url,
       );
 
-      const bodyStream = new ReadableStream<Uint8Array>({
-        pull(controller) {
-          if (leftover.length > 0) {
+      const abort = () => {
+        try { reader.cancel(); } catch {}
+        try { proc.kill(); } catch {}
+      };
+      if (options.signal) {
+        if (options.signal.aborted) abort();
+        else options.signal.addEventListener('abort', abort, { once: true });
+      }
+
+      const underlying: UnderlyingDefaultSource<Uint8Array> = {
+        pull: async (controller) => {
+          if (leftover.length) {
             controller.enqueue(leftover);
-            leftover = new Uint8Array(0);
+            leftover = EMPTY;
             return;
           }
-          return reader.read().then(({ done, value }) => {
-            if (done) controller.close();
-            else if (value) controller.enqueue(value);
-          });
+          const { done, value } = await reader.read();
+          if (done) {
+            controller.close();
+            try { reader.releaseLock(); } catch {}
+            await proc.exited;
+            return;
+          }
+          if (value && value.length) controller.enqueue(value);
         },
-        cancel() {
-          reader.cancel();
+        cancel: async () => {
+          abort();
+          await proc.exited;
         },
-      });
+      };
+
+      const bodyStream = new ReadableStream<Uint8Array>(underlying, { highWaterMark: 1 });
+
+      void drainStderr;
 
       const ok = status >= 200 && status < 300;
       const redirected = redirects.length > 0;
@@ -212,27 +272,71 @@ export default async function Http<T = any, U extends boolean = false>(
         redirects as any,
       ) as ResponseInit<ReadableStream<Uint8Array>, U>;
     } else {
-      const stdoutPromise = (async () => {
+      const stdoutRead = (async () => {
         if (!proc.stdout) throw new Error('[BunCurl2] - Missing stdout');
-        const buf = await new Response(proc.stdout).arrayBuffer();
-        return Buffer.from(buf).toString('binary');
+        const r = proc.stdout.getReader();
+        const chunks: Uint8Array[] = [];
+        let total = 0;
+        for (;;) {
+          const { done, value } = await r.read();
+          if (done) break;
+          if (value && value.length) {
+            chunks.push(value);
+            total += value.length;
+          }
+        }
+        r.releaseLock();
+        const out = new Uint8Array(total);
+        let off = 0;
+        for (const c of chunks) {
+          out.set(c, off);
+          off += c.length;
+        }
+        return Buffer.from(out).toString('binary');
+      })();
+
+      const drainStderr = (async () => {
+        if (!proc.stderr) return '';
+        const r = proc.stderr.getReader();
+        const cap = 65536;
+        const chunks: Uint8Array[] = [];
+        let total = 0;
+        try {
+          for (;;) {
+            const { done, value } = await r.read();
+            if (done) break;
+            if (value && value.length) {
+              chunks.push(value);
+              total += value.length;
+              while (total > cap) {
+                const first = chunks.shift()!;
+                total -= first.length;
+              }
+            }
+          }
+        } finally {
+          r.releaseLock();
+        }
+        const out = new Uint8Array(total);
+        let off = 0;
+        for (const c of chunks) {
+          out.set(c, off);
+          off += c.length;
+        }
+        return new TextDecoder('utf-8').decode(out);
       })();
 
       const abortPromise = new Promise<never>((_, reject) => {
         if (options.signal) {
           if (options.signal.aborted) {
             proc.kill();
-            reject(
-              new DOMException('The operation was aborted.', 'AbortError'),
-            );
+            reject(new DOMException('The operation was aborted.', 'AbortError'));
           } else {
             options.signal.addEventListener(
               'abort',
               () => {
                 proc.kill();
-                reject(
-                  new DOMException('The operation was aborted.', 'AbortError'),
-                );
+                reject(new DOMException('The operation was aborted.', 'AbortError'));
               },
               { once: true },
             );
@@ -242,7 +346,7 @@ export default async function Http<T = any, U extends boolean = false>(
 
       let stdout: string;
       try {
-        stdout = await Promise.race([stdoutPromise, abortPromise]);
+        stdout = await Promise.race([stdoutRead, abortPromise]);
       } catch (err) {
         await proc.exited;
         throw err;
@@ -251,12 +355,7 @@ export default async function Http<T = any, U extends boolean = false>(
       await proc.exited;
 
       if (proc.exitCode !== 0) {
-        const stderrData = await (async () => {
-          if (!proc.stderr) throw new Error('[BunCurl2] - Missing stderr');
-          const buf = await new Response(proc.stderr).arrayBuffer();
-          return Buffer.from(buf).toString('utf-8');
-        })();
-
+        const stderrData = await drainStderr;
         const msg = stderrData.trim().replace(/curl:\s*\(\d+\)\s*/, '');
         throw Object.assign(new Error(`[BunCurl2] - ${msg}`), {
           code: 'ERR_CURL_FAILED',
@@ -276,15 +375,9 @@ export default async function Http<T = any, U extends boolean = false>(
       );
 
       if (cacheKey && cacheServer && typeof options.cache === 'object') {
-        if (
-          typeof options.cache.validate === 'function' &&
-          !(await options.cache.validate(resp))
-        ) {
-          return options.transformResponse
-            ? options.transformResponse(resp)
-            : resp;
+        if (typeof options.cache.validate === 'function' && !(await options.cache.validate(resp))) {
+          return options.transformResponse ? options.transformResponse(resp) : resp;
         }
-
         const expireMs =
           (typeof options.cache.expire === 'number'
             ? options.cache.expire
@@ -301,7 +394,7 @@ export default async function Http<T = any, U extends boolean = false>(
             'NX',
           ]);
         } else {
-          await cacheServer.set(cacheKey, stdout, {
+          await (cacheServer as any).set(cacheKey, stdout, {
             expiration: { type: 'PX', value: expireMs },
             condition: 'NX',
           });
@@ -345,8 +438,7 @@ function prepareOptions<T, U extends boolean>(
     fastOpen: true,
     noDelay: true,
   };
-  if (init.cache)
-    init.cache.defaultExpiration = init.cache.defaultExpiration ?? 5;
+  if (init.cache) init.cache.defaultExpiration = init.cache.defaultExpiration ?? 5;
 }
 
 function generateCacheKey<T, U extends boolean>(
@@ -360,8 +452,8 @@ function generateCacheKey<T, U extends boolean>(
     !('keys' in options.cache) ||
     !options.cache.keys
       ? fields
-      : options.cache.keys;
-  const serialized = keys.map((key) => serializeField(key, options, url));
+      : (options.cache as any).keys;
+  const serialized = keys.map((key: CacheKeys) => serializeField(key, options, url));
   return md5(`BunCurl2|${serialized.join('|')}`);
 }
 
@@ -372,9 +464,13 @@ function serializeField<T, U extends boolean>(
 ): string {
   let val: unknown = key === 'url' ? url : (options as any)[key];
   if (val instanceof Headers) {
-    val = Array.from(val.entries()).map(([h, v]) => h + v);
+    const it = (val as Headers).entries();
+    const acc: string[] = [];
+    for (let e = it.next(); !e.done; e = it.next()) {
+      const [h, v] = e.value;
+      acc.push(h, v);
+    }
+    val = acc;
   }
-  return typeof val === 'object' && val !== null
-    ? JSON.stringify(val)
-    : String(val);
+  return typeof val === 'object' && val !== null ? JSON.stringify(val) : String(val);
 }
