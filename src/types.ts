@@ -350,6 +350,14 @@ interface ExtraOptions<T, U extends boolean> {
    * @default true
    */
   sortHeaders?: boolean;
+
+  /**
+   * @description
+   * Maximally prevent IP Leaks behind the proxy
+   *
+   * @default true
+   */
+  safeProxy?: boolean;
 }
 
 type BodyInit =

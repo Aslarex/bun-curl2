@@ -102,7 +102,10 @@ async function parseReader(
         const key = line.substring(0, idx).trim();
         const value = line.substring(idx + 1).trim();
         headers.push([key, value]);
-        if ((key.length === 8 || key.length === 8 + 1) && key.toLowerCase() === 'location')
+        if (
+          (key.length === 8 || key.length === 8 + 1) &&
+          key.toLowerCase() === 'location'
+        )
           locationHeader = value;
       }
     }
@@ -167,7 +170,9 @@ export default async function Http<T = any, U extends boolean = false>(
           options,
           init,
         );
-        return options.transformResponse ? options.transformResponse(resp) : resp;
+        return options.transformResponse
+          ? options.transformResponse(resp)
+          : resp;
       } catch {}
     }
   }
@@ -220,8 +225,12 @@ export default async function Http<T = any, U extends boolean = false>(
       );
 
       const abort = () => {
-        try { reader.cancel(); } catch {}
-        try { proc.kill(); } catch {}
+        try {
+          reader.cancel();
+        } catch {}
+        try {
+          proc.kill();
+        } catch {}
       };
       if (options.signal) {
         if (options.signal.aborted) abort();
@@ -238,7 +247,9 @@ export default async function Http<T = any, U extends boolean = false>(
           const { done, value } = await reader.read();
           if (done) {
             controller.close();
-            try { reader.releaseLock(); } catch {}
+            try {
+              reader.releaseLock();
+            } catch {}
             await proc.exited;
             return;
           }
@@ -250,7 +261,9 @@ export default async function Http<T = any, U extends boolean = false>(
         },
       };
 
-      const bodyStream = new ReadableStream<Uint8Array>(underlying, { highWaterMark: 1 });
+      const bodyStream = new ReadableStream<Uint8Array>(underlying, {
+        highWaterMark: 1,
+      });
 
       void drainStderr;
 
@@ -330,13 +343,17 @@ export default async function Http<T = any, U extends boolean = false>(
         if (options.signal) {
           if (options.signal.aborted) {
             proc.kill();
-            reject(new DOMException('The operation was aborted.', 'AbortError'));
+            reject(
+              new DOMException('The operation was aborted.', 'AbortError'),
+            );
           } else {
             options.signal.addEventListener(
               'abort',
               () => {
                 proc.kill();
-                reject(new DOMException('The operation was aborted.', 'AbortError'));
+                reject(
+                  new DOMException('The operation was aborted.', 'AbortError'),
+                );
               },
               { once: true },
             );
@@ -375,8 +392,13 @@ export default async function Http<T = any, U extends boolean = false>(
       );
 
       if (cacheKey && cacheServer && typeof options.cache === 'object') {
-        if (typeof options.cache.validate === 'function' && !(await options.cache.validate(resp))) {
-          return options.transformResponse ? options.transformResponse(resp) : resp;
+        if (
+          typeof options.cache.validate === 'function' &&
+          !(await options.cache.validate(resp))
+        ) {
+          return options.transformResponse
+            ? options.transformResponse(resp)
+            : resp;
         }
         const expireMs =
           (typeof options.cache.expire === 'number'
@@ -438,7 +460,8 @@ function prepareOptions<T, U extends boolean>(
     fastOpen: true,
     noDelay: true,
   };
-  if (init.cache) init.cache.defaultExpiration = init.cache.defaultExpiration ?? 5;
+  if (init.cache)
+    init.cache.defaultExpiration = init.cache.defaultExpiration ?? 5;
 }
 
 function generateCacheKey<T, U extends boolean>(
@@ -453,7 +476,9 @@ function generateCacheKey<T, U extends boolean>(
     !options.cache.keys
       ? fields
       : (options.cache as any).keys;
-  const serialized = keys.map((key: CacheKeys) => serializeField(key, options, url));
+  const serialized = keys.map((key: CacheKeys) =>
+    serializeField(key, options, url),
+  );
   return md5(`BunCurl2|${serialized.join('|')}`);
 }
 
@@ -472,5 +497,7 @@ function serializeField<T, U extends boolean>(
     }
     val = acc;
   }
-  return typeof val === 'object' && val !== null ? JSON.stringify(val) : String(val);
+  return typeof val === 'object' && val !== null
+    ? JSON.stringify(val)
+    : String(val);
 }

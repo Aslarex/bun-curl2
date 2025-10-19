@@ -38,6 +38,15 @@ const SUPPORTS = {
   TCP_NODELAY: compareVersions(CURL_VERSION, '7.11.2') >= 0,
 };
 
+const SAFE_PROXY_HEADERS = [
+  'X-Forwarded-For',
+  'Forwarded',
+  'Client-IP',
+  'True-Client-IP',
+  'X-Real-IP',
+  'Via',
+] as const;
+
 async function buildMultipartBody(formData: FormData) {
   const boundary =
     '----WebKitFormBoundary' + Math.random().toString(36).slice(2);
@@ -251,6 +260,8 @@ export default async function BuildCommand<T, U extends boolean>(
   const version =
     options.http?.version ?? (SUPPORTS.HTTP2 ? HTTP.Version20 : HTTP.Version11);
 
+  const safeProxy = options.safeProxy !== false;
+
   const cmd: string[] = [...BASE_CURL_FLAGS];
   cmd.push(
     CURL.TIMEOUT,
@@ -277,6 +288,17 @@ export default async function BuildCommand<T, U extends boolean>(
 
   if (options.proxy) {
     cmd.push(CURL.PROXY, formatProxyString(options.proxy));
+
+    if (safeProxy && url.protocol === 'http:') {
+      cmd.push('--proxytunnel');
+    }
+
+    if (safeProxy) {
+      for (const h of SAFE_PROXY_HEADERS) {
+        cmd.push(CURL.HEADER, `${h}:`);
+      }
+      cmd.push(CURL.HEADER, 'Proxy-Connection: close');
+    }
   }
 
   const followVal = options.follow ?? true;
