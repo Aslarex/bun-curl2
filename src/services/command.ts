@@ -301,6 +301,10 @@ export default async function BuildCommand<T, U extends boolean>(
     }
   }
 
+  if (options.interface) {
+    cmd.push(CURL.INTERFACE, options.interface);
+  }
+
   const followVal = options.follow ?? true;
   if (followVal) {
     cmd.push(

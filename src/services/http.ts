@@ -14,6 +14,15 @@ import { md5 } from '../models/utils';
 
 let concurrentRequests = 0;
 
+const UTF8_DECODER = new TextDecoder('utf-8');
+const BINARY_DECODER = new TextDecoder('latin1');
+
+const DEFAULT_DNS = { cache: true, servers: ['1.1.1.1', '1.0.0.1'] };
+const DEFAULT_HTTP = { keepAlive: true, keepAliveProbes: 3 };
+const DEFAULT_TCP = { fastOpen: true, noDelay: true };
+
+const EMPTY = new Uint8Array(0);
+
 const concurrentError = <T, U extends boolean>(
   max: number,
   options: RequestInit<T, U>,
@@ -24,7 +33,18 @@ const concurrentError = <T, U extends boolean>(
     { code: 'ERR_CONCURRENT_REQUESTS_REACHED', options: { ...options, url } },
   );
 
-const EMPTY = new Uint8Array(0);
+function findCRLFCRLF(buf: Uint8Array, len: number, start: number): number {
+  for (let i = start; i < len - 3; i++) {
+    if (
+      buf[i] === 13 &&
+      buf[i + 1] === 10 &&
+      buf[i + 2] === 13 &&
+      buf[i + 3] === 10
+    )
+      return i;
+  }
+  return -1;
+}
 
 async function parseReader(
   stream: ReadableStream<Uint8Array>,
@@ -37,7 +57,6 @@ async function parseReader(
   redirects: string[];
 }> {
   const reader = stream.getReader();
-  const decoder = new TextDecoder('utf-8');
   const redirects: string[] = [];
   let currentUrl = originalUrl;
 
@@ -54,21 +73,8 @@ async function parseReader(
     buf = next;
   };
 
-  const findCRLFCRLF = (arr: Uint8Array, start: number): number => {
-    for (let i = start; i < arr.length - 3; i++) {
-      if (
-        arr[i] === 13 &&
-        arr[i + 1] === 10 &&
-        arr[i + 2] === 13 &&
-        arr[i + 3] === 10
-      )
-        return i;
-    }
-    return -1;
-  };
-
-  while (true) {
-    let hdrEnd = findCRLFCRLF(buf.subarray(0, len), scanFrom);
+  for (;;) {
+    let hdrEnd = findCRLFCRLF(buf, len, scanFrom);
     while (hdrEnd === -1) {
       const { done, value } = await reader.read();
       if (done) throw new Error('Stream ended before headers finished');
@@ -76,13 +82,13 @@ async function parseReader(
       buf.set(value, len);
       scanFrom = Math.max(0, len - 3);
       len += value.length;
-      hdrEnd = findCRLFCRLF(buf.subarray(0, len), scanFrom);
+      hdrEnd = findCRLFCRLF(buf, len, scanFrom);
     }
 
     const headerBytes = buf.subarray(0, hdrEnd);
     let leftover = buf.subarray(hdrEnd + 4, len);
 
-    const headerText = decoder.decode(headerBytes);
+    const headerText = UTF8_DECODER.decode(headerBytes);
     const lines = headerText.split('\r\n');
     const statusLine = lines.shift()!;
     const status = parseInt(statusLine.split(' ')[1], 10) || 0;
@@ -96,17 +102,17 @@ async function parseReader(
 
     const headers: [string, string][] = [];
     let locationHeader: string | null = null;
+
     for (const line of lines) {
       const idx = line.indexOf(':');
-      if (idx !== -1) {
-        const key = line.substring(0, idx).trim();
-        const value = line.substring(idx + 1).trim();
-        headers.push([key, value]);
-        if (
-          (key.length === 8 || key.length === 8 + 1) &&
-          key.toLowerCase() === 'location'
-        )
-          locationHeader = value;
+      if (idx === -1) continue;
+      const rawKey = line.slice(0, idx);
+      const key = rawKey.trim();
+      const value = line.slice(idx + 1).trim();
+      headers.push([key, value]);
+      const rawLen = rawKey.length;
+      if (rawLen === 8 || rawLen === 9) {
+        if (rawKey.toLowerCase() === 'location') locationHeader = value;
       }
     }
 
@@ -123,8 +129,41 @@ async function parseReader(
       continue;
     }
 
-    return { status, headers, reader, leftover: leftover.slice(), redirects };
+    return { status, headers, reader, leftover, redirects };
   }
+}
+
+async function drainStderrStream(
+  stderr?: ReadableStream<Uint8Array> | null,
+): Promise<string> {
+  if (!stderr) return '';
+  const r = stderr.getReader();
+  const cap = 65536;
+  const chunks: Uint8Array[] = [];
+  let total = 0;
+  try {
+    for (;;) {
+      const { done, value } = await r.read();
+      if (done) break;
+      if (value && value.length) {
+        chunks.push(value);
+        total += value.length;
+        while (total > cap) {
+          const first = chunks.shift()!;
+          total -= first.length;
+        }
+      }
+    }
+  } finally {
+    r.releaseLock();
+  }
+  const out = new Uint8Array(total);
+  let off = 0;
+  for (const c of chunks) {
+    out.set(c, off);
+    off += c.length;
+  }
+  return UTF8_DECODER.decode(out);
 }
 
 export default async function Http<T = any, U extends boolean = false>(
@@ -188,36 +227,7 @@ export default async function Http<T = any, U extends boolean = false>(
     if (options.stream) {
       if (!proc.stdout) throw new Error('[BunCurl2] - Missing stdout');
 
-      const drainStderr = (async () => {
-        if (!proc.stderr) return '';
-        const r = proc.stderr.getReader();
-        const cap = 65536;
-        const chunks: Uint8Array[] = [];
-        let total = 0;
-        try {
-          for (;;) {
-            const { done, value } = await r.read();
-            if (done) break;
-            if (value && value.length) {
-              chunks.push(value);
-              total += value.length;
-              while (total > cap) {
-                const first = chunks.shift()!;
-                total -= first.length;
-              }
-            }
-          }
-        } finally {
-          r.releaseLock();
-        }
-        const out = new Uint8Array(total);
-        let off = 0;
-        for (const c of chunks) {
-          out.set(c, off);
-          off += c.length;
-        }
-        return new TextDecoder('utf-8').decode(out);
-      })();
+      const stderrPromise = drainStderrStream(proc.stderr);
 
       let { status, headers, reader, leftover, redirects } = await parseReader(
         proc.stdout,
@@ -232,9 +242,15 @@ export default async function Http<T = any, U extends boolean = false>(
           proc.kill();
         } catch {}
       };
+
       if (options.signal) {
-        if (options.signal.aborted) abort();
-        else options.signal.addEventListener('abort', abort, { once: true });
+        if (options.signal.aborted) {
+          abort();
+        } else {
+          const signal = options.signal;
+          const handler = () => abort();
+          signal.addEventListener('abort', handler, { once: true });
+        }
       }
 
       const underlying: UnderlyingDefaultSource<Uint8Array> = {
@@ -251,6 +267,7 @@ export default async function Http<T = any, U extends boolean = false>(
               reader.releaseLock();
             } catch {}
             await proc.exited;
+            await stderrPromise;
             return;
           }
           if (value && value.length) controller.enqueue(value);
@@ -258,14 +275,11 @@ export default async function Http<T = any, U extends boolean = false>(
         cancel: async () => {
           abort();
           await proc.exited;
+          await stderrPromise;
         },
       };
 
-      const bodyStream = new ReadableStream<Uint8Array>(underlying, {
-        highWaterMark: 1,
-      });
-
-      void drainStderr;
+      const bodyStream = new ReadableStream<Uint8Array>(underlying);
 
       const ok = status >= 200 && status < 300;
       const redirected = redirects.length > 0;
@@ -305,59 +319,24 @@ export default async function Http<T = any, U extends boolean = false>(
           out.set(c, off);
           off += c.length;
         }
-        return Buffer.from(out).toString('binary');
+        return BINARY_DECODER.decode(out);
       })();
 
-      const drainStderr = (async () => {
-        if (!proc.stderr) return '';
-        const r = proc.stderr.getReader();
-        const cap = 65536;
-        const chunks: Uint8Array[] = [];
-        let total = 0;
-        try {
-          for (;;) {
-            const { done, value } = await r.read();
-            if (done) break;
-            if (value && value.length) {
-              chunks.push(value);
-              total += value.length;
-              while (total > cap) {
-                const first = chunks.shift()!;
-                total -= first.length;
-              }
-            }
-          }
-        } finally {
-          r.releaseLock();
-        }
-        const out = new Uint8Array(total);
-        let off = 0;
-        for (const c of chunks) {
-          out.set(c, off);
-          off += c.length;
-        }
-        return new TextDecoder('utf-8').decode(out);
-      })();
+      const stderrPromise = drainStderrStream(proc.stderr);
+
+      let abortHandler: (() => void) | undefined;
 
       const abortPromise = new Promise<never>((_, reject) => {
-        if (options.signal) {
-          if (options.signal.aborted) {
-            proc.kill();
-            reject(
-              new DOMException('The operation was aborted.', 'AbortError'),
-            );
-          } else {
-            options.signal.addEventListener(
-              'abort',
-              () => {
-                proc.kill();
-                reject(
-                  new DOMException('The operation was aborted.', 'AbortError'),
-                );
-              },
-              { once: true },
-            );
-          }
+        if (!options.signal) return;
+        const signal = options.signal;
+        abortHandler = () => {
+          proc.kill();
+          reject(new DOMException('The operation was aborted.', 'AbortError'));
+        };
+        if (signal.aborted) {
+          abortHandler();
+        } else {
+          signal.addEventListener('abort', abortHandler, { once: true });
         }
       });
 
@@ -366,13 +345,18 @@ export default async function Http<T = any, U extends boolean = false>(
         stdout = await Promise.race([stdoutRead, abortPromise]);
       } catch (err) {
         await proc.exited;
+        await stderrPromise;
         throw err;
+      } finally {
+        if (abortHandler && options.signal) {
+          options.signal.removeEventListener('abort', abortHandler);
+        }
       }
 
       await proc.exited;
 
       if (proc.exitCode !== 0) {
-        const stderrData = await drainStderr;
+        const stderrData = await stderrPromise;
         const msg = stderrData.trim().replace(/curl:\s*\(\d+\)\s*/, '');
         throw Object.assign(new Error(`[BunCurl2] - ${msg}`), {
           code: 'ERR_CURL_FAILED',
@@ -443,23 +427,14 @@ function prepareOptions<T, U extends boolean>(
   options: RequestInit<T, U>,
   init: GlobalInit & { cache?: CacheInstance },
 ) {
-  options.dns = options.dns ?? {
-    cache: true,
-    servers: ['1.1.1.1', '1.0.0.1'],
-  };
+  if (!options.dns) options.dns = DEFAULT_DNS;
   options.parseJSON = options.parseJSON ?? init.parseJSON ?? true;
   options.method = options.method ?? 'GET';
   options.compress = options.compress ?? init.compress ?? true;
   options.follow = options.follow ?? true;
   options.sortHeaders = options.sortHeaders ?? true;
-  options.http = options.http ?? {
-    keepAlive: true,
-    keepAliveProbes: 3,
-  };
-  init.tcp = init.tcp ?? {
-    fastOpen: true,
-    noDelay: true,
-  };
+  if (!options.http) options.http = { ...DEFAULT_HTTP };
+  if (!init.tcp) init.tcp = { ...DEFAULT_TCP };
   if (init.cache)
     init.cache.defaultExpiration = init.cache.defaultExpiration ?? 5;
 }
@@ -489,12 +464,9 @@ function serializeField<T, U extends boolean>(
 ): string {
   let val: unknown = key === 'url' ? url : (options as any)[key];
   if (val instanceof Headers) {
-    const it = (val as Headers).entries();
     const acc: string[] = [];
-    for (let e = it.next(); !e.done; e = it.next()) {
-      const [h, v] = e.value;
-      acc.push(h, v);
-    }
+    for (const [h, v] of val.entries()) acc.push(h, v);
+    acc.sort();
     val = acc;
   }
   return typeof val === 'object' && val !== null

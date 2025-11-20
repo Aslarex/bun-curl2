@@ -233,6 +233,11 @@ interface Connection {
    * Maximum time in seconds allowed for the entire request/response cycle.
    */
   maxTime?: number;
+
+  /**
+   * Specify a network interface which curl should use
+   */
+  interface?: string;
 }
 
 export type CacheKeys = 'url' | 'body' | 'headers' | 'proxy' | 'method';
