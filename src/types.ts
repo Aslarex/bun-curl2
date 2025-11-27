@@ -167,6 +167,12 @@ type GlobalInit = {
    * @default false
    */
   redirectsAsUrls?: boolean;
+
+  /**
+   * @description
+   * Set the executable path of **cURL**
+   */
+  executablePath?: string;
 };
 
 /**
@@ -355,14 +361,6 @@ interface ExtraOptions<T, U extends boolean> {
    * @default true
    */
   sortHeaders?: boolean;
-
-  /**
-   * @description
-   * Maximally prevent IP Leaks behind the proxy
-   *
-   * @default true
-   */
-  safeProxy?: boolean;
 }
 
 type BodyInit =

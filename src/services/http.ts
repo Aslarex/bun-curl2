@@ -299,27 +299,11 @@ export default async function Http<T = any, U extends boolean = false>(
         redirects as any,
       ) as ResponseInit<ReadableStream<Uint8Array>, U>;
     } else {
-      const stdoutRead = (async () => {
+
+      const stdoutPromise = (async () => {
         if (!proc.stdout) throw new Error('[BunCurl2] - Missing stdout');
-        const r = proc.stdout.getReader();
-        const chunks: Uint8Array[] = [];
-        let total = 0;
-        for (;;) {
-          const { done, value } = await r.read();
-          if (done) break;
-          if (value && value.length) {
-            chunks.push(value);
-            total += value.length;
-          }
-        }
-        r.releaseLock();
-        const out = new Uint8Array(total);
-        let off = 0;
-        for (const c of chunks) {
-          out.set(c, off);
-          off += c.length;
-        }
-        return BINARY_DECODER.decode(out);
+        const buf = await new Response(proc.stdout).arrayBuffer();
+        return Buffer.from(buf).toString('binary');
       })();
 
       const stderrPromise = drainStderrStream(proc.stderr);
@@ -342,7 +326,7 @@ export default async function Http<T = any, U extends boolean = false>(
 
       let stdout: string;
       try {
-        stdout = await Promise.race([stdoutRead, abortPromise]);
+        stdout = await Promise.race([stdoutPromise, abortPromise]);
       } catch (err) {
         await proc.exited;
         await stderrPromise;

@@ -23,7 +23,6 @@ import { sortHeaders } from '../models/headers';
 const encoder = new TextEncoder();
 
 const BASE_CURL_FLAGS = [
-  CURL.BASE,
   CURL.INFO,
   CURL.SILENT,
   CURL.SHOW_ERROR,
@@ -38,14 +37,14 @@ const SUPPORTS = {
   TCP_NODELAY: compareVersions(CURL_VERSION, '7.11.2') >= 0,
 };
 
-const SAFE_PROXY_HEADERS = [
-  'X-Forwarded-For',
-  'Forwarded',
-  'Client-IP',
-  'True-Client-IP',
-  'X-Real-IP',
-  'Via',
-] as const;
+// const SAFE_PROXY_HEADERS = [
+//   'X-Forwarded-For',
+//   'Forwarded',
+//   'Client-IP',
+//   'True-Client-IP',
+//   'X-Real-IP',
+//   'Via',
+// ] as const;
 
 async function buildMultipartBody(formData: FormData) {
   const boundary =
@@ -258,11 +257,9 @@ export default async function BuildCommand<T, U extends boolean>(
   const connTimeout = options.connectionTimeout ?? 5;
   const method = (options.method ?? 'GET').toUpperCase();
   const version =
-    options.http?.version ?? (SUPPORTS.HTTP2 ? HTTP.Version20 : HTTP.Version11);
+    options.http?.version ?? (SUPPORTS.HTTP2 && url.protocol == 'https:' ? HTTP.Version20 : HTTP.Version11);
 
-  const safeProxy = options.safeProxy !== false;
-
-  const cmd: string[] = [...BASE_CURL_FLAGS];
+  const cmd: string[] = [init.executablePath || 'curl', ...BASE_CURL_FLAGS];
   cmd.push(
     CURL.TIMEOUT,
     String(maxTime),
@@ -289,16 +286,16 @@ export default async function BuildCommand<T, U extends boolean>(
   if (options.proxy) {
     cmd.push(CURL.PROXY, formatProxyString(options.proxy));
 
-    if (safeProxy && url.protocol === 'http:') {
-      cmd.push('--proxytunnel');
-    }
+    // if (safeProxy && url.protocol === 'http:') {
+    //   cmd.push('--proxytunnel');
+    // }
 
-    if (safeProxy) {
-      for (const h of SAFE_PROXY_HEADERS) {
-        cmd.push(CURL.HEADER, `${h}:`);
-      }
-      cmd.push(CURL.HEADER, 'Proxy-Connection: close');
-    }
+    // if (safeProxy) {
+    //   for (const h of SAFE_PROXY_HEADERS) {
+    //     cmd.push(CURL.HEADER, `${h}:`);
+    //   }
+    //   cmd.push(CURL.HEADER, 'Proxy-Connection: close');
+    // }
   }
 
   if (options.interface) {
