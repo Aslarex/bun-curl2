@@ -25,6 +25,7 @@ const CURL = {
   TLS_MAX: '--tls-max' as const,
   TLS13_CIPHERS: '--tls13-ciphers' as const,
   COMPRESSED: '--compressed' as const,
+  COOKIE: '-b' as const,
   PROXY: '--proxy' as const,
   FOLLOW: '--location' as const,
   MAX_REDIRS: '--max-redirs' as const,

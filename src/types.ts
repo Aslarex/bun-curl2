@@ -358,7 +358,7 @@ interface ExtraOptions<T, U extends boolean> {
    * @description
    * Re-serialize request headers in the Canonical HTTP/1.1 Header Order (RFC 2616 §14).
    *
-   * @default true
+   * @default false
    */
   sortHeaders?: boolean;
 }

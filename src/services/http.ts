@@ -15,7 +15,6 @@ import { md5 } from '../models/utils';
 let concurrentRequests = 0;
 
 const UTF8_DECODER = new TextDecoder('utf-8');
-const BINARY_DECODER = new TextDecoder('latin1');
 
 const DEFAULT_DNS = { cache: true, servers: ['1.1.1.1', '1.0.0.1'] };
 const DEFAULT_HTTP = { keepAlive: true, keepAliveProbes: 3 };
@@ -416,7 +415,7 @@ function prepareOptions<T, U extends boolean>(
   options.method = options.method ?? 'GET';
   options.compress = options.compress ?? init.compress ?? true;
   options.follow = options.follow ?? true;
-  options.sortHeaders = options.sortHeaders ?? true;
+  options.sortHeaders = options.sortHeaders ?? false;
   if (!options.http) options.http = { ...DEFAULT_HTTP };
   if (!init.tcp) init.tcp = { ...DEFAULT_TCP };
   if (init.cache)

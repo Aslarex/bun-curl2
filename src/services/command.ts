@@ -22,11 +22,7 @@ import { sortHeaders } from '../models/headers';
 
 const encoder = new TextEncoder();
 
-const BASE_CURL_FLAGS = [
-  CURL.INFO,
-  CURL.SILENT,
-  CURL.SHOW_ERROR,
-] as const;
+const BASE_CURL_FLAGS = [CURL.INFO, CURL.SILENT, CURL.SHOW_ERROR] as const;
 
 const SUPPORTS = {
   HTTP2: CURL_OUTPUT.includes('http2'),
@@ -37,40 +33,30 @@ const SUPPORTS = {
   TCP_NODELAY: compareVersions(CURL_VERSION, '7.11.2') >= 0,
 };
 
-// const SAFE_PROXY_HEADERS = [
-//   'X-Forwarded-For',
-//   'Forwarded',
-//   'Client-IP',
-//   'True-Client-IP',
-//   'X-Real-IP',
-//   'Via',
-// ] as const;
-
 async function buildMultipartBody(formData: FormData) {
   const boundary =
     '----WebKitFormBoundary' + Math.random().toString(36).slice(2);
-  const parts: Uint8Array[] = [];
+
+  const parts: Buffer[] = [];
 
   for (const [key, value] of formData.entries() as unknown as [string, any]) {
     let header = `--${boundary}\r\nContent-Disposition: form-data; name="${key}"`;
-    let chunk: Uint8Array;
-
     if (value instanceof Blob) {
       const file = value as File;
       header += `; filename="${file.name || 'file'}"\r\nContent-Type: ${file.type || 'application/octet-stream'}\r\n\r\n`;
-      const arr = await file.arrayBuffer();
-      chunk = new Uint8Array(arr);
+      parts.push(Buffer.from(encoder.encode(header)));
+      parts.push(Buffer.from(await file.arrayBuffer()));
+      parts.push(Buffer.from('\r\n'));
     } else {
       header += '\r\n\r\n';
-      chunk = encoder.encode(String(value));
+      parts.push(Buffer.from(encoder.encode(header)));
+      parts.push(Buffer.from(encoder.encode(String(value))));
+      parts.push(Buffer.from('\r\n'));
     }
-
-    parts.push(encoder.encode(header), chunk, encoder.encode('\r\n'));
   }
 
-  parts.push(encoder.encode(`--${boundary}--\r\n`));
-  const bodyBuffer = Buffer.concat(parts.map((u) => Buffer.from(u)));
-  return { body: bodyBuffer, boundary };
+  parts.push(Buffer.from(encoder.encode(`--${boundary}--\r\n`)));
+  return { body: Buffer.concat(parts), boundary };
 }
 
 async function prepareRequestBody(body: unknown) {
@@ -94,21 +80,21 @@ async function prepareRequestBody(body: unknown) {
   ) {
     const arr = (body as Blob).arrayBuffer
       ? await (body as Blob).arrayBuffer()
-      : (body as ArrayBuffer);
+      : ArrayBuffer.isView(body)
+        ? (body as ArrayBufferView).buffer
+        : (body as ArrayBuffer);
     return { body: Buffer.from(arr as ArrayBuffer) };
   }
 
   if ((body as any) instanceof ReadableStream) {
     const reader = (body as ReadableStream).getReader();
-    const chunks: Uint8Array[] = [];
-    // eslint-disable-next-line no-constant-condition
+    const chunks: Buffer[] = [];
     while (true) {
       const { value, done } = await reader.read();
       if (done) break;
-      if (value) chunks.push(value);
+      if (value) chunks.push(Buffer.from(value));
     }
-    const concatenated = Buffer.concat(chunks.map((c) => Buffer.from(c)));
-    return { body: concatenated };
+    return { body: Buffer.concat(chunks) };
   }
 
   if (typeof body === 'object' && body !== null && hasJsonStructure(body)) {
@@ -125,19 +111,28 @@ function prepareHeaders(
   sort: boolean,
 ): [string, string][] {
   if (!headers) return [];
+  if (sort) return sortHeaders(headers);
 
-  let result: [string, string][];
-  if (sort) {
-    result = sortHeaders(headers);
-  } else if (headers instanceof Headers) {
-    result = Array.from(headers.entries());
-  } else if (Array.isArray(headers)) {
-    result = headers.map(([k, v]) => [k, String(v)]);
-  } else {
-    result = Object.entries(headers).map(([k, v]) => [k, String(v)]);
+  if (headers instanceof Headers) {
+    return Array.from(headers.entries());
   }
 
-  return result;
+  if (Array.isArray(headers)) {
+    const out = new Array<[string, string]>(headers.length);
+    for (let i = 0; i < headers.length; i++) {
+      const [k, v] = headers[i];
+      out[i] = [k, String(v)];
+    }
+    return out;
+  }
+
+  const entries = Object.entries(headers);
+  const out = new Array<[string, string]>(entries.length);
+  for (let i = 0; i < entries.length; i++) {
+    const [k, v] = entries[i];
+    out[i] = [k, String(v)];
+  }
+  return out;
 }
 
 function buildTLSOptions<T, U extends boolean>(
@@ -147,13 +142,16 @@ function buildTLSOptions<T, U extends boolean>(
   const tlsOpts = options.tls;
   if (!tlsOpts) return;
 
-  if (tlsOpts.insecure) {
-    cmd.push(CURL.INSECURE);
-  }
+  if (tlsOpts.insecure) cmd.push(CURL.INSECURE);
 
   const tlsVers = tlsOpts.versions ?? [TLS.Version12, TLS.Version13];
-  const low = Math.min(...tlsVers);
-  const high = Math.max(...tlsVers);
+  let low = tlsVers[0];
+  let high = tlsVers[0];
+  for (let i = 1; i < tlsVers.length; i++) {
+    const v = tlsVers[i];
+    if (v < low) low = v;
+    if (v > high) high = v;
+  }
 
   const tlsMap: Record<number, { flag: string; str: string }> = {
     769: { flag: CURL.TLSv1_0, str: '1.0' },
@@ -162,12 +160,11 @@ function buildTLSOptions<T, U extends boolean>(
     772: { flag: CURL.TLSv1_3, str: '1.3' },
   };
 
-  if (tlsMap[low]) {
-    cmd.push(tlsMap[low].flag);
-  }
-  if (tlsMap[high]) {
-    cmd.push(CURL.TLS_MAX, tlsMap[high].str);
-  }
+  const lo = tlsMap[low];
+  if (lo) cmd.push(lo.flag);
+
+  const hi = tlsMap[high];
+  if (hi) cmd.push(CURL.TLS_MAX, hi.str);
 
   const c = tlsOpts.ciphers;
   if (c) {
@@ -178,7 +175,7 @@ function buildTLSOptions<T, U extends boolean>(
         Array.isArray(DEFAULT) ? DEFAULT.join(':') : DEFAULT,
       );
     }
-    if (TLS13 && tlsVers.indexOf(772) > -1) {
+    if (TLS13 && high >= 772) {
       cmd.push(
         CURL.TLS13_CIPHERS,
         Array.isArray(TLS13) ? TLS13.join(':') : TLS13,
@@ -193,9 +190,7 @@ async function buildDNSOptions<T, U extends boolean>(
   cmd: string[],
 ) {
   const dnsOpts = options.dns;
-  if (!dnsOpts) {
-    return;
-  }
+  if (!dnsOpts) return;
 
   if (dnsOpts.servers && SUPPORTS.DNS_SERVERS) {
     cmd.push(CURL.DNS_SERVERS, dnsOpts.servers.join(','));
@@ -239,16 +234,19 @@ export default async function BuildCommand<T, U extends boolean>(
 
   const tr1 = options.transformRequest;
   const tr2 = init.transformRequest;
+
   if (typeof tr1 === 'function') {
-    const tr = tr1(
-      Object.assign(options, { url: urlStr }),
-    ) as RequestInitWithURL<T, U>;
+    const tr = tr1({ ...(options as any), url: urlStr }) as RequestInitWithURL<
+      T,
+      U
+    >;
     url = new URL(tr.url);
     urlStr = tr.url;
   } else if (typeof tr2 === 'function' && tr1 !== false) {
-    const tr = tr2(
-      Object.assign(options, { url: urlStr }),
-    ) as RequestInitWithURL<T, U>;
+    const tr = tr2({ ...(options as any), url: urlStr }) as RequestInitWithURL<
+      T,
+      U
+    >;
     url = new URL(tr.url);
     urlStr = tr.url;
   }
@@ -257,9 +255,13 @@ export default async function BuildCommand<T, U extends boolean>(
   const connTimeout = options.connectionTimeout ?? 5;
   const method = (options.method ?? 'GET').toUpperCase();
   const version =
-    options.http?.version ?? (SUPPORTS.HTTP2 && url.protocol == 'https:' ? HTTP.Version20 : HTTP.Version11);
+    options.http?.version ??
+    (SUPPORTS.HTTP2 && url.protocol === 'https:'
+      ? HTTP.Version20
+      : HTTP.Version11);
 
   const cmd: string[] = [init.executablePath || 'curl', ...BASE_CURL_FLAGS];
+
   cmd.push(
     CURL.TIMEOUT,
     String(maxTime),
@@ -269,38 +271,15 @@ export default async function BuildCommand<T, U extends boolean>(
   );
 
   buildTLSOptions(options, cmd);
-
   await buildDNSOptions(url, options, cmd);
 
-  if (options.compress && method !== 'HEAD') {
-    cmd.push(CURL.COMPRESSED);
-  }
+  if (options.compress && method !== 'HEAD') cmd.push(CURL.COMPRESSED);
 
-  if (init.tcp?.fastOpen && SUPPORTS.TCP_FASTOPEN) {
-    cmd.push(CURL.TCP_FASTOPEN);
-  }
-  if (init.tcp?.noDelay && SUPPORTS.TCP_NODELAY) {
-    cmd.push(CURL.TCP_NODELAY);
-  }
+  if (init.tcp?.fastOpen && SUPPORTS.TCP_FASTOPEN) cmd.push(CURL.TCP_FASTOPEN);
+  if (init.tcp?.noDelay && SUPPORTS.TCP_NODELAY) cmd.push(CURL.TCP_NODELAY);
 
-  if (options.proxy) {
-    cmd.push(CURL.PROXY, formatProxyString(options.proxy));
-
-    // if (safeProxy && url.protocol === 'http:') {
-    //   cmd.push('--proxytunnel');
-    // }
-
-    // if (safeProxy) {
-    //   for (const h of SAFE_PROXY_HEADERS) {
-    //     cmd.push(CURL.HEADER, `${h}:`);
-    //   }
-    //   cmd.push(CURL.HEADER, 'Proxy-Connection: close');
-    // }
-  }
-
-  if (options.interface) {
-    cmd.push(CURL.INTERFACE, options.interface);
-  }
+  if (options.proxy) cmd.push(CURL.PROXY, formatProxyString(options.proxy));
+  if (options.interface) cmd.push(CURL.INTERFACE, options.interface);
 
   const followVal = options.follow ?? true;
   if (followVal) {
@@ -312,13 +291,15 @@ export default async function BuildCommand<T, U extends boolean>(
   }
 
   if (version === HTTP.Version11) {
-    if (options.http?.keepAlive === false || options.http?.keepAlive === 0) {
+    const ka = options.http?.keepAlive;
+    if (ka === false || ka === 0) {
       cmd.push(CURL.NO_KEEPALIVE);
-    } else if (typeof options.http?.keepAlive === 'number') {
-      cmd.push(CURL.KEEPALIVE_TIME, String(options.http.keepAlive));
+    } else if (typeof ka === 'number') {
+      cmd.push(CURL.KEEPALIVE_TIME, String(ka));
     }
-    if (typeof options.http?.keepAliveProbes === 'number') {
-      cmd.push(CURL.KEEPALIVE_CNT, String(options.http.keepAliveProbes));
+    const kap = options.http?.keepAliveProbes;
+    if (typeof kap === 'number') {
+      cmd.push(CURL.KEEPALIVE_CNT, String(kap));
     }
   }
 
@@ -328,38 +309,54 @@ export default async function BuildCommand<T, U extends boolean>(
     if (typeof prepared.body === 'string') {
       cmd.push(CURL.DATA_RAW, prepared.body);
     } else {
-      cmd.push(CURL.DATA_RAW, prepared.body.toString('utf-8'));
+      cmd.push(CURL.DATA_RAW, prepared.body.toString());
     }
   }
 
   const ordered = prepareHeaders(options.headers, !!options.sortHeaders);
+
   let hasCt = false;
   let ua = init.defaultAgent ?? `Bun/${Bun.version}`;
-  for (const [k, v] of ordered) {
+  let cookie: string | undefined;
+
+  for (let i = 0; i < ordered.length; i++) {
+    const [k, v] = ordered[i];
     const lower = k.toLowerCase();
+
     if (lower === 'content-type') {
       hasCt = true;
       cmd.push(CURL.HEADER, `${k}: ${v}`);
       continue;
     }
+
     if (lower === 'user-agent') {
       ua = v;
       continue;
     }
+
+    if (lower === 'cookie') {
+      cookie = cookie ? `${cookie}; ${v}` : v;
+      continue;
+    }
+
     cmd.push(CURL.HEADER, `${k}: ${v}`);
   }
+
   cmd.push(CURL.USER_AGENT, ua);
+  if (cookie) cmd.push(CURL.COOKIE, cookie);
+
   if (prepared?.type && !hasCt) {
     cmd.push(CURL.HEADER, `content-type: ${prepared.type}`);
   }
 
-  if (method === 'HEAD') {
-    cmd.push(CURL.HEAD);
-  } else {
-    cmd.push(CURL.METHOD, method);
+  if (method === 'HEAD') cmd.push(CURL.HEAD);
+  else cmd.push(CURL.METHOD, method);
+
+  if (urlStr.indexOf('[') !== -1 || urlStr.indexOf(']') !== -1) {
+    urlStr = urlStr.replace(/\[|\]/g, (c) => (c === '[' ? '%5B' : '%5D'));
   }
 
-  cmd.push(urlStr.replace(/\[|\]/g, (c) => (c === '[' ? '%5B' : '%5D')));
+  cmd.push(urlStr);
 
   return { url, cmd };
 }
