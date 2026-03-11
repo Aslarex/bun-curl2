@@ -39,8 +39,9 @@ function findCRLFCRLF(buf: Uint8Array, len: number, start: number): number {
       buf[i + 1] === 10 &&
       buf[i + 2] === 13 &&
       buf[i + 3] === 10
-    )
+    ) {
       return i;
+    }
   }
   return -1;
 }
@@ -140,6 +141,7 @@ async function drainStderrStream(
   const cap = 65536;
   const chunks: Uint8Array[] = [];
   let total = 0;
+
   try {
     for (;;) {
       const { done, value } = await r.read();
@@ -156,12 +158,14 @@ async function drainStderrStream(
   } finally {
     r.releaseLock();
   }
+
   const out = new Uint8Array(total);
   let off = 0;
   for (const c of chunks) {
     out.set(c, off);
     off += c.length;
   }
+
   return UTF8_DECODER.decode(out);
 }
 
@@ -183,6 +187,17 @@ export default async function Http<T = any, U extends boolean = false>(
   init: GlobalInit & { redirectsAsUrls?: U; cache?: CacheInstance } = {},
 ): Promise<ResponseInit<any, U>> {
   prepareOptions(options, init);
+
+  const rerunFn = <X, Y extends boolean>(
+    nextUrl: string,
+    nextOptions: RequestInit<X, Y> & { stream?: boolean },
+    nextInit: GlobalInit,
+  ) =>
+    Http<X, Y>(
+      nextUrl,
+      nextOptions as any,
+      nextInit as GlobalInit & { redirectsAsUrls?: Y; cache?: CacheInstance },
+    );
 
   const maxConcurrent = init.maxConcurrentRequests ?? 250;
   if (concurrentRequests >= maxConcurrent)
@@ -207,6 +222,7 @@ export default async function Http<T = any, U extends boolean = false>(
           true,
           options,
           init,
+          rerunFn as any,
         );
         return options.transformResponse
           ? options.transformResponse(resp)
@@ -217,6 +233,7 @@ export default async function Http<T = any, U extends boolean = false>(
 
   concurrentRequests++;
   let proc: Bun.Subprocess<'pipe', 'pipe', 'pipe'>;
+
   try {
     const tsStart = performance.now();
     const build = await BuildCommand<T, U>(uriObj, options, init);
@@ -259,6 +276,7 @@ export default async function Http<T = any, U extends boolean = false>(
             leftover = EMPTY;
             return;
           }
+
           const { done, value } = await reader.read();
           if (done) {
             controller.close();
@@ -269,6 +287,7 @@ export default async function Http<T = any, U extends boolean = false>(
             await stderrPromise;
             return;
           }
+
           if (value && value.length) controller.enqueue(value);
         },
         cancel: async () => {
@@ -296,9 +315,11 @@ export default async function Http<T = any, U extends boolean = false>(
         performance.now() - tsStart,
         options as RequestInit<ReadableStream<Uint8Array>, U>,
         redirects as any,
+        url,
+        init,
+        rerunFn as any,
       ) as ResponseInit<ReadableStream<Uint8Array>, U>;
     } else {
-
       const stdoutPromise = (async () => {
         if (!proc.stdout) throw new Error('[BunCurl2] - Missing stdout');
         const buf = await new Response(proc.stdout).arrayBuffer();
@@ -356,6 +377,7 @@ export default async function Http<T = any, U extends boolean = false>(
         false,
         options,
         init,
+        rerunFn as any,
       );
 
       if (cacheKey && cacheServer && typeof options.cache === 'object') {
@@ -367,6 +389,7 @@ export default async function Http<T = any, U extends boolean = false>(
             ? options.transformResponse(resp)
             : resp;
         }
+
         const expireMs =
           (typeof options.cache.expire === 'number'
             ? options.cache.expire
@@ -434,9 +457,11 @@ function generateCacheKey<T, U extends boolean>(
     !options.cache.keys
       ? fields
       : (options.cache as any).keys;
+
   const serialized = keys.map((key: CacheKeys) =>
     serializeField(key, options, url),
   );
+
   return md5(`BunCurl2|${serialized.join('|')}`);
 }
 
@@ -446,12 +471,14 @@ function serializeField<T, U extends boolean>(
   url: string,
 ): string {
   let val: unknown = key === 'url' ? url : (options as any)[key];
+
   if (val instanceof Headers) {
     const acc: string[] = [];
     for (const [h, v] of val.entries()) acc.push(h, v);
     acc.sort();
     val = acc;
   }
+
   return typeof val === 'object' && val !== null
     ? JSON.stringify(val)
     : String(val);

@@ -419,9 +419,7 @@ interface BaseRequestInit {
  * @template T - The type associated with the request body.
  */
 interface RequestInit<T = any, U extends boolean = false>
-  extends BaseRequestInit,
-    ExtraOptions<T, U>,
-    Connection {}
+  extends BaseRequestInit, ExtraOptions<T, U>, Connection {}
 
 /**
  * Represents an HTTP response with additional metadata.
@@ -465,6 +463,13 @@ interface ResponseInit<T = any, U extends boolean = false> {
    * @returns The parsed JSON object.
    */
   json(): any;
+
+  /**
+   * Re-runs the original request.
+   *
+   * You may override parts of the original request options.
+   */
+  rerun(overrides?: Partial<RequestInit<T, U>>): Promise<ResponseInit<T, U>>;
 
   /**
    * The response headers.

@@ -7,6 +7,12 @@ import type {
 import Headers from '../models/headers';
 import { hasJsonStructure } from '../models/utils';
 
+type RerunFn<T, U extends boolean> = (
+  url: string,
+  options: RequestInit<T, U>,
+  init: GlobalInit,
+) => Promise<ResponseInit<T, U>>;
+
 function normalizeHeaders(
   h: string[][] | [string, string][],
 ): [string, string][] {
@@ -61,9 +67,10 @@ function findHttpStarts(raw: string, out: number[]) {
   }
 }
 
-export class ResponseWrapper<T, U extends boolean>
-  implements ResponseInit<T, U>
-{
+export class ResponseWrapper<T, U extends boolean> implements ResponseInit<
+  T,
+  U
+> {
   constructor(
     public url: string,
     public response: T,
@@ -76,11 +83,30 @@ export class ResponseWrapper<T, U extends boolean>
     public elapsedTime: number,
     public options: RequestInit<T, U>,
     public redirects: ResponseInit<T, U>['redirects'] = [],
+    private _requestUrl?: string,
+    private _init?: GlobalInit,
+    private _rerunFn?: RerunFn<T, U>,
   ) {}
+
   private _text?: string;
   private _json?: unknown;
   private _ab?: ArrayBuffer;
   private _blob?: Blob;
+
+  async rerun(
+    overrides: Partial<RequestInit<T, U>> = {},
+  ): Promise<ResponseInit<T, U>> {
+    if (!this._rerunFn || !this._requestUrl || !this._init) {
+      throw new Error('[BunCurl2] - This response cannot be re-run');
+    }
+
+    return this._rerunFn(
+      this._requestUrl,
+      { ...this.options, ...overrides },
+      this._init,
+    );
+  }
+
   json(): T {
     if (this.options.stream)
       throw new Error('Response is a stream. Consume it directly.');
@@ -92,6 +118,7 @@ export class ResponseWrapper<T, U extends boolean>
     }
     return this._json as T;
   }
+
   text(): string {
     if (this.options.stream)
       throw new Error('Response is a stream. Consume it directly.');
@@ -102,6 +129,7 @@ export class ResponseWrapper<T, U extends boolean>
         : JSON.stringify(this.response);
     return this._text;
   }
+
   arrayBuffer(): ArrayBuffer {
     if (this.options.stream)
       throw new Error('Response is a stream. Consume it directly.');
@@ -109,6 +137,7 @@ export class ResponseWrapper<T, U extends boolean>
     this._ab = Buffer.from(this.text(), 'binary').buffer;
     return this._ab;
   }
+
   blob(): Blob {
     if (this.options.stream)
       throw new Error('Response is a stream. Consume it directly.');
@@ -131,6 +160,7 @@ export function processResponses(
   findHttpStarts(raw, starts);
   if (starts.length === 0) return entries;
   starts.push(rawLen);
+
   for (let i = 0; i < starts.length - 1; i++) {
     const part = raw.substring(starts[i], starts[i + 1]).replace(/^\r?\n/, '');
     const rnrn = part.indexOf('\r\n\r\n');
@@ -145,6 +175,7 @@ export function processResponses(
     const status = parseInt(statusLine.split(' ')[1], 10) || 500;
     const headers: [string, string][] = [];
     let cursor = statusLineEnd > -1 ? statusLineEnd + 2 : statusLine.length;
+
     while (cursor < hdrEnd) {
       const nextEnd = part.indexOf('\r\n', cursor);
       const endPos = nextEnd > -1 && nextEnd <= hdrEnd ? nextEnd : hdrEnd;
@@ -157,6 +188,7 @@ export function processResponses(
       }
       cursor = endPos + 2;
     }
+
     const body = sepLen ? part.substring(hdrEnd + sepLen).trim() : '';
     entries.push({
       url,
@@ -168,6 +200,7 @@ export function processResponses(
       cached,
     });
   }
+
   return entries;
 }
 
@@ -175,6 +208,8 @@ export function buildResponse<T, U extends boolean>(
   entry: BaseResponseInit,
   opts: RequestInit<T, U>,
   cfg: GlobalInit,
+  requestUrl?: string,
+  rerunFn?: RerunFn<T, U>,
 ): ResponseInit<T, U> {
   if (cfg.maxBodySize) {
     const limit = cfg.maxBodySize * 1024 * 1024;
@@ -186,6 +221,7 @@ export function buildResponse<T, U extends boolean>(
       throw err;
     }
   }
+
   const hdrPairs = normalizeHeaders(entry.headers);
   const ct = getContentType(hdrPairs);
   const lower = ct.toLowerCase();
@@ -194,7 +230,9 @@ export function buildResponse<T, U extends boolean>(
     lower.includes('json') ||
     lower.includes('xml') ||
     lower.includes('javascript');
+
   let data: T;
+
   if (isText) {
     const txt = Buffer.from(entry.body, 'binary').toString('utf-8');
     if (entry.parseJSON) {
@@ -210,10 +248,12 @@ export function buildResponse<T, U extends boolean>(
   } else {
     data = entry.body as unknown as T;
   }
+
   const status = entry.status;
   const ok = status >= 200 && status < 300;
   const redir = status >= 300 && status < 400;
   const type = status >= 400 ? 'error' : 'default';
+
   return new ResponseWrapper(
     entry.url,
     data,
@@ -225,6 +265,10 @@ export function buildResponse<T, U extends boolean>(
     entry.cached,
     performance.now() - entry.requestStartTime,
     opts,
+    [],
+    requestUrl,
+    cfg,
+    rerunFn,
   );
 }
 
@@ -236,15 +280,18 @@ export function processAndBuild<T, U extends boolean = false>(
   cached: boolean,
   opts: RequestInit<T, U>,
   cfg: GlobalInit,
+  rerunFn?: RerunFn<T, U>,
 ): ResponseInit<T, U> {
   const entries = processResponses(url, raw, startTime, parseJSON, cached);
   if (entries.length > 1) {
     const h0 = getHeader(normalizeHeaders(entries[0].headers), 'location');
     if (!h0) entries.shift();
   }
+
   if (cfg.redirectsAsUrls === true) {
     let cur = url;
     const urls: string[] = [];
+
     for (const entry of entries) {
       if (entry.status >= 300 && entry.status < 400) {
         const loc = getHeader(normalizeHeaders(entry.headers), 'location');
@@ -254,20 +301,30 @@ export function processAndBuild<T, U extends boolean = false>(
         }
       }
     }
+
     const lastEntry = entries[entries.length - 1];
-    const final = buildResponse<T, U>(lastEntry, opts, cfg) as ResponseInit<
-      T,
-      U
-    >;
+    const final = buildResponse<T, U>(
+      lastEntry,
+      opts,
+      cfg,
+      url,
+      rerunFn,
+    ) as ResponseInit<T, U>;
+
     final.url = cur;
     final.redirected = urls.length > 0;
     final.redirects = urls as ResponseInit<T, U>['redirects'];
     return final;
   }
-  const wrappers = entries.map((e) => buildResponse<T, U>(e, opts, cfg));
+
+  const wrappers = entries.map((e) =>
+    buildResponse<T, U>(e, opts, cfg, url, rerunFn),
+  );
+
   wrappers[0].url = url;
   let cur = url;
   const lastIdx = wrappers.length - 1;
+
   for (let i = 0; i < lastIdx; i++) {
     const w = wrappers[i];
     if (w.status >= 300 && w.status < 400) {
@@ -278,11 +335,13 @@ export function processAndBuild<T, U extends boolean = false>(
       }
     }
   }
+
   const final = wrappers[lastIdx] as ResponseInit<T, U>;
   final.redirected = lastIdx > 0;
   final.redirects = wrappers.slice(0, lastIdx) as ResponseInit<
     T,
     U
   >['redirects'];
+
   return final;
 }
